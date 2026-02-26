@@ -19,9 +19,9 @@ cask "hex" do
   app "Hex.app"
 
   zap trash: [
-    "~/Library/Application Support/com.kitlangton.Hex",
-    "~/Library/Caches/com.kitlangton.Hex",
-    "~/Library/Containers/com.kitlangton.Hex",
-    "~/Library/Preferences/com.kitlangton.Hex.plist",
+    "~/Library/Application Support/com.alasano.Hex",
+    "~/Library/Caches/com.alasano.Hex",
+    "~/Library/Containers/com.alasano.Hex",
+    "~/Library/Preferences/com.alasano.Hex.plist",
   ]
 end

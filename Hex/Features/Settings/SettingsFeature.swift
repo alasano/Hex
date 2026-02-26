@@ -52,6 +52,8 @@ struct SettingsFeature {
     var modelDownload = ModelDownloadFeature.State()
     var shouldFlashModelSection = false
 
+    // AI Transforms
+    var isOpenAIConfigured: Bool = false
   }
 
   enum Action: BindableAction {
@@ -91,6 +93,12 @@ struct SettingsFeature {
     case addWordRemapping
     case removeWordRemapping(UUID)
     case setRemappingScratchpadFocused(Bool)
+
+    // AI Transforms / OpenAI API Key
+    case saveOpenAIAPIKey(String)
+    case deleteOpenAIAPIKey
+    case checkOpenAIAPIKey
+    case openAIAPIKeyChecked(Bool)
   }
 
   @Dependency(\.keyEventMonitor) var keyEventMonitor
@@ -98,6 +106,8 @@ struct SettingsFeature {
   @Dependency(\.transcription) var transcription
   @Dependency(\.recording) var recording
   @Dependency(\.permissions) var permissions
+  @Dependency(\.keychain) var keychain
+  @Dependency(\.openAI) var openAI
 
   var body: some ReducerOf<Self> {
     BindingReducer()
@@ -370,6 +380,36 @@ struct SettingsFeature {
         }
         return .none
 
+      // AI Transforms / OpenAI API Key
+      case let .saveOpenAIAPIKey(key):
+        return .run { send in
+          try await keychain.save("openai-api-key", key)
+          await send(.openAIAPIKeyChecked(true))
+        }
+
+      case .deleteOpenAIAPIKey:
+        state.$hexSettings.withLock {
+          $0.aiTransformEnabled = false
+        }
+        return .run { send in
+          try? await keychain.delete("openai-api-key")
+          await send(.openAIAPIKeyChecked(false))
+        }
+
+      case .checkOpenAIAPIKey:
+        return .run { send in
+          let isConfigured = await openAI.isConfigured()
+          await send(.openAIAPIKeyChecked(isConfigured))
+        }
+
+      case let .openAIAPIKeyChecked(isConfigured):
+        state.isOpenAIConfigured = isConfigured
+        if !isConfigured {
+          state.$hexSettings.withLock {
+            $0.aiTransformEnabled = false
+          }
+        }
+        return .none
       }
     }
   }
