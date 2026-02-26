@@ -23,6 +23,8 @@ struct TranscriptionFeature {
     var isTranscribing: Bool = false
     var isPrewarming: Bool = false
     var isTransformingAI: Bool = false
+    var isAITransformRecording: Bool = false
+    var isShowingAIPromptWarning: Bool = false
     var error: String?
     var recordingStartTime: Date?
     var meter: Meter = .init(averagePower: 0, peakPower: 0)
@@ -41,6 +43,10 @@ struct TranscriptionFeature {
     // Hotkey actions
     case hotKeyPressed
     case hotKeyReleased
+
+    // AI hotkey actions
+    case aiHotKeyPressed
+    case aiHotKeyReleased
 
     // Recording flow
     case startRecording
@@ -111,6 +117,14 @@ struct TranscriptionFeature {
         // the delayed "startRecording" effect if we never actually started.
         return handleHotKeyReleased(isRecording: state.isRecording)
 
+      // MARK: - AI HotKey Flow
+
+      case .aiHotKeyPressed:
+        return handleAIHotKeyPressed(&state)
+
+      case .aiHotKeyReleased:
+        return handleAIHotKeyReleased(&state)
+
       // MARK: - Recording Flow
 
       case .startRecording:
@@ -173,13 +187,15 @@ private extension TranscriptionFeature {
   func startHotKeyMonitoringEffect() -> Effect<Action> {
     .run { send in
       var hotKeyProcessor: HotKeyProcessor = .init(hotkey: HotKey(key: nil, modifiers: [.option]))
+      var aiHotKeyProcessor: HotKeyProcessor = .init(hotkey: HotKey(key: nil, modifiers: []))
       @Shared(.isSettingHotKey) var isSettingHotKey: Bool
+      @Shared(.isSettingAITransformHotkey) var isSettingAITransformHotkey: Bool
       @Shared(.hexSettings) var hexSettings: HexSettings
 
       // Handle incoming input events (keyboard and mouse)
       let token = keyEventMonitor.handleInputEvent { inputEvent in
-        // Skip if the user is currently setting a hotkey
-        if isSettingHotKey {
+        // Skip if the user is currently setting any hotkey
+        if isSettingHotKey || isSettingAITransformHotkey {
           return false
         }
 
@@ -188,61 +204,113 @@ private extension TranscriptionFeature {
         hotKeyProcessor.useDoubleTapOnly = hexSettings.useDoubleTapOnly
         hotKeyProcessor.minimumKeyTime = hexSettings.minimumKeyTime
 
+        // Keep AI hotkey processor in sync
+        let hasAIHotkey = hexSettings.aiTransformHotkey != nil
+        if let aiHotkey = hexSettings.aiTransformHotkey {
+          aiHotKeyProcessor.hotkey = aiHotkey
+          aiHotKeyProcessor.minimumKeyTime = hexSettings.minimumKeyTime
+        }
+
         switch inputEvent {
         case .keyboard(let keyEvent):
           // If Escape is pressed with no modifiers while idle, let's treat that as `cancel`.
           if keyEvent.key == .escape, keyEvent.modifiers.isEmpty,
-             hotKeyProcessor.state == .idle
+             hotKeyProcessor.state == .idle, aiHotKeyProcessor.state == .idle
           {
             Task { await send(.cancel) }
             return false
           }
 
-          // Process the key event
-          switch hotKeyProcessor.process(keyEvent: keyEvent) {
-          case .startRecording:
-            // If double-tap lock is triggered, we start recording immediately
-            if hotKeyProcessor.state == .doubleTapLock {
-              Task { await send(.startRecording) }
-            } else {
-              Task { await send(.hotKeyPressed) }
-            }
-            // If the hotkey is purely modifiers, return false to keep it from interfering with normal usage
-            // But if useDoubleTapOnly is true, always intercept the key
-            return hexSettings.useDoubleTapOnly || keyEvent.key != nil
+          // Process both hotkey processors so they maintain internal state
+          let aiResult = hasAIHotkey ? aiHotKeyProcessor.process(keyEvent: keyEvent) : nil
+          let mainResult = hotKeyProcessor.process(keyEvent: keyEvent)
 
-          case .stopRecording:
-            Task { await send(.hotKeyReleased) }
-            return false // or `true` if you want to intercept
+          // AI hotkey takes priority if it produced an action
+          if let aiResult, hasAIHotkey {
+            switch aiResult {
+            case .startRecording:
+              if aiHotKeyProcessor.state == .doubleTapLock {
+                Task { await send(.aiHotKeyPressed) }
+              } else {
+                Task { await send(.aiHotKeyPressed) }
+              }
+              return keyEvent.key != nil
 
-          case .cancel:
-            Task { await send(.cancel) }
-            return true
+            case .stopRecording:
+              Task { await send(.aiHotKeyReleased) }
+              return false
 
-          case .discard:
-            Task { await send(.discard) }
-            return false // Don't intercept - let the key chord reach other apps
-
-          case .none:
-            // If we detect repeated same chord, maybe intercept.
-            if let pressedKey = keyEvent.key,
-               pressedKey == hotKeyProcessor.hotkey.key,
-               keyEvent.modifiers == hotKeyProcessor.hotkey.modifiers
-            {
+            case .cancel:
+              Task { await send(.cancel) }
               return true
+
+            case .discard:
+              Task { await send(.discard) }
+              return false
             }
-            return false
           }
 
+          // Fall through to main hotkey
+          if let mainResult {
+            switch mainResult {
+            case .startRecording:
+              if hotKeyProcessor.state == .doubleTapLock {
+                Task { await send(.startRecording) }
+              } else {
+                Task { await send(.hotKeyPressed) }
+              }
+              return hexSettings.useDoubleTapOnly || keyEvent.key != nil
+
+            case .stopRecording:
+              Task { await send(.hotKeyReleased) }
+              return false
+
+            case .cancel:
+              Task { await send(.cancel) }
+              return true
+
+            case .discard:
+              Task { await send(.discard) }
+              return false
+            }
+          }
+
+          // Neither processor produced an action
+          if let pressedKey = keyEvent.key,
+             pressedKey == hotKeyProcessor.hotkey.key,
+             keyEvent.modifiers == hotKeyProcessor.hotkey.modifiers
+          {
+            return true
+          }
+          return false
+
         case .mouseClick:
-          // Process mouse click - for modifier-only hotkeys, this may cancel/discard
-          switch hotKeyProcessor.processMouseClick() {
+          // Process mouse clicks for both processors
+          let aiMouseResult = hasAIHotkey ? aiHotKeyProcessor.processMouseClick() : nil
+          let mainMouseResult = hotKeyProcessor.processMouseClick()
+
+          // Check AI hotkey first
+          if let aiMouseResult, hasAIHotkey {
+            switch aiMouseResult {
+            case .cancel:
+              Task { await send(.cancel) }
+              return false
+            case .discard:
+              Task { await send(.discard) }
+              return false
+            default:
+              break
+            }
+          }
+
+          // Then main hotkey
+          switch mainMouseResult {
           case .cancel:
             Task { await send(.cancel) }
-            return false // Don't intercept the click itself
+            return false
           case .discard:
             Task { await send(.discard) }
-            return false // Don't intercept the click itself
+            return false
           case .startRecording, .stopRecording, .none:
             return false
           }
@@ -281,6 +349,27 @@ private extension TranscriptionFeature {
   func handleHotKeyReleased(isRecording: Bool) -> Effect<Action> {
     // Always stop recording when hotkey is released
     return isRecording ? .send(.stopRecording) : .none
+  }
+
+  func handleAIHotKeyPressed(_ state: inout State) -> Effect<Action> {
+    let prompt = state.hexSettings.aiTransformPrompt
+    if prompt.isEmpty {
+      // No prompt configured — show warning and play error sound
+      state.isShowingAIPromptWarning = true
+      return .run { _ in soundEffect.play(.cancel) }
+    }
+
+    // Prompt is set — mark this as an AI transform recording and start normally
+    state.isAITransformRecording = true
+    return handleHotKeyPressed(isTranscribing: state.isTranscribing)
+  }
+
+  func handleAIHotKeyReleased(_ state: inout State) -> Effect<Action> {
+    if state.isShowingAIPromptWarning {
+      state.isShowingAIPromptWarning = false
+      return .none
+    }
+    return handleHotKeyReleased(isRecording: state.isRecording)
   }
 }
 
@@ -462,11 +551,11 @@ private extension TranscriptionFeature {
       return .none
     }
 
-    // Check if AI transforms are enabled
-    let aiTransformEnabled = state.hexSettings.aiTransformEnabled
+    // Check if this recording was triggered by the AI hotkey
+    let shouldApplyAITransform = state.isAITransformRecording
     let aiTransformPrompt = state.hexSettings.aiTransformPrompt
 
-    if aiTransformEnabled && !aiTransformPrompt.isEmpty {
+    if shouldApplyAITransform && !aiTransformPrompt.isEmpty {
       state.isTransformingAI = true
       let modelName = state.hexSettings.aiModelName
       let maxOutputTokens = state.hexSettings.aiMaxOutputTokens
@@ -486,6 +575,7 @@ private extension TranscriptionFeature {
     }
 
     // No AI transform - proceed with normal finalization
+    state.isAITransformRecording = false
     let sourceAppBundleID = state.sourceAppBundleID
     let sourceAppName = state.sourceAppName
     let transcriptionHistory = state.$transcriptionHistory
@@ -530,6 +620,7 @@ private extension TranscriptionFeature {
     duration: TimeInterval
   ) -> Effect<Action> {
     state.isTransformingAI = false
+    state.isAITransformRecording = false
 
     transcriptionFeatureLogger.info("AI transformation complete: '\(transformedText.prefix(100), privacy: .private)...'")
 
@@ -562,6 +653,7 @@ private extension TranscriptionFeature {
     duration: TimeInterval
   ) -> Effect<Action> {
     state.isTransformingAI = false
+    state.isAITransformRecording = false
 
     // Fall back to original text on AI transform failure
     transcriptionFeatureLogger.warning("AI transformation failed, using original text: \(error.localizedDescription)")
@@ -637,6 +729,7 @@ private extension TranscriptionFeature {
     state.isRecording = false
     state.isPrewarming = false
     state.isTransformingAI = false
+    state.isAITransformRecording = false
 
     return .merge(
       .cancel(id: CancelID.transcription),
@@ -654,6 +747,7 @@ private extension TranscriptionFeature {
   func handleDiscard(_ state: inout State) -> Effect<Action> {
     state.isRecording = false
     state.isPrewarming = false
+    state.isAITransformRecording = false
 
     // Silently discard - no sound effect
     return .run { [sleepManagement] _ in
@@ -672,7 +766,9 @@ struct TranscriptionView: View {
   @ObserveInjection var inject
 
   var status: TranscriptionIndicatorView.Status {
-    if store.isTransformingAI {
+    if store.isShowingAIPromptWarning {
+      return .aiPromptWarning
+    } else if store.isTransformingAI {
       return .transformingAI
     } else if store.isTranscribing {
       return .transcribing

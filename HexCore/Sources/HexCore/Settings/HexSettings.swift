@@ -50,6 +50,7 @@ public struct HexSettings: Codable, Equatable, Sendable {
 
 	// AI Transforms
 	public var aiTransformEnabled: Bool
+	public var aiTransformHotkey: HotKey?
 	public var aiTransformPrompt: String
 	public var aiModelName: String
 	public var aiMaxOutputTokens: Int
@@ -80,6 +81,7 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		convertNumberWordsToDigits: Bool = false,
 		convertSpokenYearsToDigits: Bool = false,
 		aiTransformEnabled: Bool = false,
+		aiTransformHotkey: HotKey? = nil,
 		aiTransformPrompt: String = "",
 		aiModelName: String = "gpt-5-nano",
 		aiMaxOutputTokens: Int = 32768
@@ -109,6 +111,7 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		self.convertNumberWordsToDigits = convertNumberWordsToDigits
 		self.convertSpokenYearsToDigits = convertSpokenYearsToDigits
 		self.aiTransformEnabled = aiTransformEnabled
+		self.aiTransformHotkey = aiTransformHotkey
 		self.aiTransformPrompt = aiTransformPrompt
 		self.aiModelName = aiModelName
 		self.aiMaxOutputTokens = aiMaxOutputTokens
@@ -159,6 +162,7 @@ private enum HexSettingKey: String, CodingKey, CaseIterable {
 	case convertNumberWordsToDigits
 	case convertSpokenYearsToDigits
 	case aiTransformEnabled
+	case aiTransformHotkey
 	case aiTransformPrompt
 	case aiModelName
 	case aiMaxOutputTokens
@@ -296,6 +300,14 @@ private enum HexSettingsSchema {
 		SettingsField(.convertNumberWordsToDigits, keyPath: \.convertNumberWordsToDigits, default: defaults.convertNumberWordsToDigits).eraseToAny(),
 		SettingsField(.convertSpokenYearsToDigits, keyPath: \.convertSpokenYearsToDigits, default: defaults.convertSpokenYearsToDigits).eraseToAny(),
 		SettingsField(.aiTransformEnabled, keyPath: \.aiTransformEnabled, default: defaults.aiTransformEnabled).eraseToAny(),
+		SettingsField(
+			.aiTransformHotkey,
+			keyPath: \.aiTransformHotkey,
+			default: defaults.aiTransformHotkey,
+			encode: { container, key, value in
+				try container.encodeIfPresent(value, forKey: key)
+			}
+		).eraseToAny(),
 		SettingsField(.aiTransformPrompt, keyPath: \.aiTransformPrompt, default: defaults.aiTransformPrompt).eraseToAny(),
 		SettingsField(.aiModelName, keyPath: \.aiModelName, default: defaults.aiModelName).eraseToAny(),
 		SettingsField(.aiMaxOutputTokens, keyPath: \.aiMaxOutputTokens, default: defaults.aiMaxOutputTokens).eraseToAny()

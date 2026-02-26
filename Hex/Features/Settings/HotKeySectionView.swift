@@ -64,7 +64,7 @@ struct HotKeySectionView: View {
     }
 }
 
-private struct ModifierSideControls: View {
+struct ModifierSideControls: View {
     @ObserveInjection var inject
     var modifiers: Modifiers
     var onSelect: (Modifier.Kind, Modifier.Side) -> Void
@@ -82,14 +82,20 @@ private struct ModifierSideControls: View {
                         Text("\(kind.symbol) \(kind.displayName)")
                             .settingsCaption()
 
-                        Picker("Modifier side", selection: binding) {
-                            ForEach(Modifier.Side.allCases, id: \.self) { side in
-                                Text(side.displayName)
-                                    .tag(side)
-                                    .disabled(!kind.supportsSideSelection && side != .either)
+                        HStack {
+                            Text("Modifier side")
+                            Spacer()
+                            Picker("Modifier side", selection: binding) {
+                                ForEach(Modifier.Side.allCases, id: \.self) { side in
+                                    Text(side.displayName)
+                                        .tag(side)
+                                        .disabled(!kind.supportsSideSelection && side != .either)
+                                }
                             }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .fixedSize()
                         }
-                        .pickerStyle(.segmented)
                     }
                 }
             }

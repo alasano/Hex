@@ -20,41 +20,87 @@ struct AITransformsView: View {
 				VStack(alignment: .leading, spacing: 6) {
 					Text("AI Transforms")
 						.font(.title2.bold())
-					Text("Transform transcriptions using AI before pasting. Requires an OpenAI API key.")
+					Text("Transform transcriptions using AI before pasting. Assign a separate hotkey to trigger AI-enhanced transcription.")
 						.font(.callout)
 						.foregroundStyle(.secondary)
 				}
 
-					// Custom Prompt Section
+				// AI Transform Hotkey Section
+				GroupBox {
+					VStack(spacing: 12) {
+						let aiHotKey = store.hexSettings.aiTransformHotkey
+						let key = store.isSettingAITransformHotkey ? nil : aiHotKey?.key
+						let modifiers = store.isSettingAITransformHotkey
+							? store.currentAITransformModifiers
+							: (aiHotKey?.modifiers ?? .init(modifiers: []))
+
+						HStack {
+							Spacer()
+							HotKeyView(modifiers: modifiers, key: key, isActive: store.isSettingAITransformHotkey)
+								.animation(.spring(), value: key)
+								.animation(.spring(), value: modifiers)
+							Spacer()
+						}
+						.contentShape(Rectangle())
+						.onTapGesture {
+							store.send(.startSettingAITransformHotkey)
+						}
+
+						if !store.isSettingAITransformHotkey, let aiHotKey,
+						   aiHotKey.key == nil, !aiHotKey.modifiers.isEmpty {
+							ModifierSideControls(
+								modifiers: aiHotKey.modifiers,
+								onSelect: { kind, side in
+									store.send(.setAITransformModifierSide(kind, side))
+								}
+							)
+							.transition(.opacity)
+						}
+
+						if store.hexSettings.aiTransformHotkey != nil {
+							Button("Clear Hotkey") {
+								store.send(.clearAITransformHotkey)
+							}
+							.foregroundStyle(.secondary)
+							.font(.caption)
+						}
+					}
+					.padding(.vertical, 4)
+				} label: {
+					VStack(alignment: .leading, spacing: 4) {
+						Text("AI Transform Hotkey")
+							.font(.headline)
+						Text("Use this hotkey instead of your main shortcut to apply AI transformation to the transcription.")
+							.settingsCaption()
+					}
+				}
+
+				// Custom Prompt Section
 				GroupBox {
 					VStack(alignment: .leading, spacing: 12) {
-						Toggle("Enable Custom Prompt", isOn: $store.hexSettings.aiTransformEnabled)
-							.toggleStyle(.checkbox)
-							.disabled(!store.isOpenAIConfigured)
+						VStack(alignment: .leading, spacing: 4) {
+							Text("Transformation Prompt")
+								.font(.caption.weight(.semibold))
+								.foregroundStyle(.secondary)
 
-						if store.hexSettings.aiTransformEnabled {
-							VStack(alignment: .leading, spacing: 4) {
-								Text("Transformation Prompt")
-									.font(.caption.weight(.semibold))
-									.foregroundStyle(.secondary)
+							TextEditor(text: $store.hexSettings.aiTransformPrompt)
+								.font(.body)
+								.frame(minHeight: 80, maxHeight: 160)
+								.scrollContentBackground(.hidden)
+								.padding(8)
+								.background(
+									RoundedRectangle(cornerRadius: 6)
+										.fill(Color(nsColor: .controlBackgroundColor))
+								)
+								.overlay(
+									RoundedRectangle(cornerRadius: 6)
+										.stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+								)
+								.disabled(!store.isOpenAIConfigured)
+								.opacity(store.isOpenAIConfigured ? 1 : 0.5)
 
-								TextEditor(text: $store.hexSettings.aiTransformPrompt)
-									.font(.body)
-									.frame(minHeight: 80, maxHeight: 160)
-									.scrollContentBackground(.hidden)
-									.padding(8)
-									.background(
-										RoundedRectangle(cornerRadius: 6)
-											.fill(Color(nsColor: .controlBackgroundColor))
-									)
-									.overlay(
-										RoundedRectangle(cornerRadius: 6)
-											.stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-									)
-
-								Text("Example: \"Make it sound like Samuel L. Jackson\" or \"Add enthusiasm and energy\"")
-									.settingsCaption()
-							}
+							Text("Example: \"Make it sound like Samuel L. Jackson\" or \"Add enthusiasm and energy\"")
+								.settingsCaption()
 						}
 					}
 					.padding(.vertical, 4)
@@ -67,7 +113,7 @@ struct AITransformsView: View {
 					}
 				}
 
-					// API Configuration Section
+				// API Configuration Section
 				GroupBox {
 					VStack(alignment: .leading, spacing: 12) {
 						// API Key Row
@@ -153,6 +199,9 @@ struct AITransformsView: View {
 					store.send(.deleteOpenAIAPIKey)
 				}
 			)
+		}
+		.task {
+			await store.send(.task).finish()
 		}
 		.task {
 			await store.send(.checkOpenAIAPIKey).finish()

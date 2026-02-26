@@ -21,6 +21,10 @@ extension SharedReaderKey
     Self[.inMemory("isSettingPasteLastTranscriptHotkey"), default: false]
   }
 
+  static var isSettingAITransformHotkey: Self {
+    Self[.inMemory("isSettingAITransformHotkey"), default: false]
+  }
+
   static var isRemappingScratchpadFocused: Self {
     Self[.inMemory("isRemappingScratchpadFocused"), default: false]
   }
@@ -35,6 +39,7 @@ struct SettingsFeature {
     @Shared(.hexSettings) var hexSettings: HexSettings
     @Shared(.isSettingHotKey) var isSettingHotKey: Bool = false
     @Shared(.isSettingPasteLastTranscriptHotkey) var isSettingPasteLastTranscriptHotkey: Bool = false
+    @Shared(.isSettingAITransformHotkey) var isSettingAITransformHotkey: Bool = false
     @Shared(.isRemappingScratchpadFocused) var isRemappingScratchpadFocused: Bool = false
     @Shared(.transcriptionHistory) var transcriptionHistory: TranscriptionHistory
     @Shared(.hotkeyPermissionState) var hotkeyPermissionState: HotkeyPermissionState
@@ -42,6 +47,7 @@ struct SettingsFeature {
     var languages: IdentifiedArrayOf<Language> = []
     var currentModifiers: Modifiers = .init(modifiers: [])
     var currentPasteLastModifiers: Modifiers = .init(modifiers: [])
+    var currentAITransformModifiers: Modifiers = .init(modifiers: [])
     var remappingScratchpadText: String = ""
     
     // Available microphones
@@ -93,6 +99,11 @@ struct SettingsFeature {
     case addWordRemapping
     case removeWordRemapping(UUID)
     case setRemappingScratchpadFocused(Bool)
+
+    // AI Transform hotkey
+    case startSettingAITransformHotkey
+    case clearAITransformHotkey
+    case setAITransformModifierSide(Modifier.Kind, Modifier.Side)
 
     // AI Transforms / OpenAI API Key
     case saveOpenAIAPIKey(String)
@@ -237,7 +248,62 @@ struct SettingsFeature {
         state.$hexSettings.withLock { $0.pasteLastTranscriptHotkey = nil }
         return .none
 
+      case .startSettingAITransformHotkey:
+        state.$isSettingAITransformHotkey.withLock { $0 = true }
+        state.currentAITransformModifiers = .init(modifiers: [])
+        return .none
+
+      case .clearAITransformHotkey:
+        state.$hexSettings.withLock { $0.aiTransformHotkey = nil }
+        return .none
+
+      case let .setAITransformModifierSide(kind, side):
+        guard let hotkey = state.hexSettings.aiTransformHotkey, hotkey.key == nil else { return .none }
+        let updatedModifiers = hotkey.modifiers.setting(kind: kind, to: side)
+        state.$hexSettings.withLock {
+          $0.aiTransformHotkey?.modifiers = updatedModifiers
+        }
+        return .none
+
       case let .keyEvent(keyEvent):
+        // Handle AI transform hotkey setting
+        if state.isSettingAITransformHotkey {
+          if keyEvent.key == .escape {
+            state.$isSettingAITransformHotkey.withLock { $0 = false }
+            state.currentAITransformModifiers = []
+            return .none
+          }
+
+          state.currentAITransformModifiers = keyEvent.modifiers.union(state.currentAITransformModifiers)
+          let currentModifiers = state.currentAITransformModifiers
+          let mainHotkey = state.hexSettings.hotkey
+          if let key = keyEvent.key {
+            let candidate = HotKey(key: key, modifiers: currentModifiers.erasingSides())
+            // Reject if it matches the main hotkey
+            guard candidate.key != mainHotkey.key || !candidate.modifiers.matchesExactly(mainHotkey.modifiers) else {
+              return .none
+            }
+            state.$hexSettings.withLock {
+              $0.aiTransformHotkey = candidate
+            }
+            state.$isSettingAITransformHotkey.withLock { $0 = false }
+            state.currentAITransformModifiers = []
+          } else if keyEvent.modifiers.isEmpty {
+            let candidate = HotKey(key: nil, modifiers: currentModifiers.erasingSides())
+            // Reject if it matches the main hotkey
+            guard candidate.key != mainHotkey.key || !candidate.modifiers.matchesExactly(mainHotkey.modifiers) else {
+              state.currentAITransformModifiers = []
+              return .none
+            }
+            state.$hexSettings.withLock {
+              $0.aiTransformHotkey = candidate
+            }
+            state.$isSettingAITransformHotkey.withLock { $0 = false }
+            state.currentAITransformModifiers = []
+          }
+          return .none
+        }
+
         // Handle paste last transcript hotkey setting
         if state.isSettingPasteLastTranscriptHotkey {
           if keyEvent.key == .escape {
@@ -272,17 +338,29 @@ struct SettingsFeature {
 
         state.currentModifiers = keyEvent.modifiers.union(state.currentModifiers)
         let currentModifiers = state.currentModifiers
+        let aiHotkey = state.hexSettings.aiTransformHotkey
         if let key = keyEvent.key {
+          let candidate = HotKey(key: key, modifiers: currentModifiers.erasingSides())
+          // Reject if it matches the AI transform hotkey
+          if let aiHotkey, candidate.key == aiHotkey.key,
+             candidate.modifiers.matchesExactly(aiHotkey.modifiers) {
+            return .none
+          }
           state.$hexSettings.withLock {
-            $0.hotkey.key = key
-            $0.hotkey.modifiers = currentModifiers.erasingSides()
+            $0.hotkey = candidate
           }
           state.$isSettingHotKey.withLock { $0 = false }
           state.currentModifiers = []
         } else if keyEvent.modifiers.isEmpty {
+          let candidate = HotKey(key: nil, modifiers: currentModifiers.erasingSides())
+          // Reject if it matches the AI transform hotkey
+          if let aiHotkey, candidate.key == aiHotkey.key,
+             candidate.modifiers.matchesExactly(aiHotkey.modifiers) {
+            state.currentModifiers = []
+            return .none
+          }
           state.$hexSettings.withLock {
-            $0.hotkey.key = nil
-            $0.hotkey.modifiers = currentModifiers.erasingSides()
+            $0.hotkey = candidate
           }
           state.$isSettingHotKey.withLock { $0 = false }
           state.currentModifiers = []

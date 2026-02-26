@@ -18,6 +18,7 @@ struct TranscriptionIndicatorView: View {
     case transcribing
     case prewarming
     case transformingAI
+    case aiPromptWarning
   }
 
   var status: Status
@@ -25,6 +26,7 @@ struct TranscriptionIndicatorView: View {
 
   let transcribeBaseColor: Color = .blue
   let aiTransformBaseColor: Color = .purple
+  let warningBaseColor: Color = .orange
   private var backgroundColor: Color {
     switch status {
     case .hidden: return Color.clear
@@ -33,6 +35,7 @@ struct TranscriptionIndicatorView: View {
     case .transcribing: return transcribeBaseColor.mix(with: .black, by: 0.5)
     case .prewarming: return transcribeBaseColor.mix(with: .black, by: 0.5)
     case .transformingAI: return aiTransformBaseColor.mix(with: .black, by: 0.5)
+    case .aiPromptWarning: return warningBaseColor.mix(with: .black, by: 0.5)
     }
   }
 
@@ -44,6 +47,7 @@ struct TranscriptionIndicatorView: View {
     case .transcribing: return transcribeBaseColor.mix(with: .white, by: 0.1).opacity(0.6)
     case .prewarming: return transcribeBaseColor.mix(with: .white, by: 0.1).opacity(0.6)
     case .transformingAI: return aiTransformBaseColor.mix(with: .white, by: 0.1).opacity(0.6)
+    case .aiPromptWarning: return warningBaseColor.mix(with: .white, by: 0.1).opacity(0.6)
     }
   }
 
@@ -55,6 +59,7 @@ struct TranscriptionIndicatorView: View {
     case .transcribing: return transcribeBaseColor
     case .prewarming: return transcribeBaseColor
     case .transformingAI: return aiTransformBaseColor
+    case .aiPromptWarning: return warningBaseColor
     }
   }
 
@@ -167,6 +172,24 @@ struct TranscriptionIndicatorView: View {
         .transition(.opacity)
         .zIndex(2)
       }
+
+      // Show tooltip when AI prompt is missing
+      if status == .aiPromptWarning {
+        VStack(spacing: 4) {
+          Text("AI transform requires a custom prompt — set one in AI Transforms settings")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+              RoundedRectangle(cornerRadius: 4)
+                .fill(Color.orange.opacity(0.8))
+            )
+        }
+        .offset(y: -24)
+        .transition(.opacity)
+        .zIndex(2)
+      }
     }
     .enableInjection()
   }
@@ -180,6 +203,7 @@ struct TranscriptionIndicatorView: View {
     TranscriptionIndicatorView(status: .transcribing, meter: .init(averagePower: 0, peakPower: 0))
     TranscriptionIndicatorView(status: .prewarming, meter: .init(averagePower: 0, peakPower: 0))
     TranscriptionIndicatorView(status: .transformingAI, meter: .init(averagePower: 0, peakPower: 0))
+    TranscriptionIndicatorView(status: .aiPromptWarning, meter: .init(averagePower: 0, peakPower: 0))
   }
   .padding(40)
 }
