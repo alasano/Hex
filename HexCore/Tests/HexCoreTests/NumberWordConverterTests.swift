@@ -141,6 +141,38 @@ struct NumberWordConverterTests {
 		#expect(NumberWordConverter.apply("one point two") == "1.2")
 	}
 
+	// MARK: - Implied Hundreds (Casual Speech)
+
+	@Test
+	func convertsImpliedHundreds() {
+		#expect(NumberWordConverter.apply("two forty eight") == "248")
+		#expect(NumberWordConverter.apply("three twenty one") == "321")
+		#expect(NumberWordConverter.apply("nine eleven") == "911")
+		#expect(NumberWordConverter.apply("one fifty") == "150")
+		#expect(NumberWordConverter.apply("five thirty") == "530")
+	}
+
+	@Test
+	func convertsImpliedHundredsInContext() {
+		#expect(NumberWordConverter.apply("I want you to create the spec for Cook two forty eight") == "I want you to create the spec for Cook 248")
+		#expect(NumberWordConverter.apply("room three twenty one") == "room 321")
+		#expect(NumberWordConverter.apply("call nine eleven now") == "call 911 now")
+	}
+
+	@Test
+	func convertsImpliedHundredsWithHyphenatedTens() {
+		#expect(NumberWordConverter.apply("two forty-eight") == "248")
+		#expect(NumberWordConverter.apply("three twenty-one") == "321")
+	}
+
+	@Test
+	func doesNotApplyImpliedHundredsForTeensOrLargerOnes() {
+		// "eleven thirty" — 11 is not 1-9, should stay separate
+		#expect(NumberWordConverter.apply("eleven thirty") == "11 30")
+		// "ten twenty" — 10 is not 1-9, should stay separate
+		#expect(NumberWordConverter.apply("ten twenty") == "10 20")
+	}
+
 	// MARK: - Mixed Text
 
 	@Test

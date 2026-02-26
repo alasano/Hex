@@ -314,7 +314,18 @@ public enum NumberWordConverter {
 			// Handle hyphenated numbers like "twenty-five"
 			let parts = lower.split(separator: "-").map { String($0) }
 			if parts.count == 2, let tensVal = tens[parts[0]], let onesVal = ones[parts[1]] {
-				currentValue += tensVal + onesVal
+				let hyphenatedValue = tensVal + onesVal
+				if let lastParsedKind, !sawScaleInSequence, tokensConsumed > 0 {
+					if lastParsedKind == .ones, (1...9).contains(currentValue) {
+						// Implied hundred: "two forty-eight" → 248
+						currentValue = currentValue * 100 + hyphenatedValue
+					} else {
+						// Don't merge: "twenty twenty-one", "eleven forty-five", etc.
+						break
+					}
+				} else {
+					currentValue += hyphenatedValue
+				}
 				tokensConsumed += 1
 				i += 1
 				lastWasNumber = true
@@ -324,11 +335,17 @@ public enum NumberWordConverter {
 
 			// Handle ones (0-19)
 			if let value = ones[lower] {
-				// Avoid merging ambiguous multi-number sequences like "one and two" or "twenty twenty one"
 				if let lastParsedKind, lastParsedKind == .ones, !sawScaleInSequence, tokensConsumed > 0 {
-					break
+					if (1...9).contains(currentValue) && (10...19).contains(value) {
+						// Implied hundred with teen: "nine eleven" → 911
+						currentValue = currentValue * 100 + value
+					} else {
+						// Don't merge: "one two", "eleven twelve", etc.
+						break
+					}
+				} else {
+					currentValue += value
 				}
-				currentValue += value
 				tokensConsumed += 1
 				i += 1
 				lastWasNumber = true
@@ -342,7 +359,17 @@ public enum NumberWordConverter {
 				if let lastParsedKind, lastParsedKind == .tens, !sawScaleInSequence, tokensConsumed > 0 {
 					break
 				}
-				currentValue += value
+				if let lastParsedKind, lastParsedKind == .ones, !sawScaleInSequence, tokensConsumed > 0 {
+					if (1...9).contains(currentValue) {
+						// Implied hundred: "two forty" → 240, "five thirty" → 530
+						currentValue = currentValue * 100 + value
+					} else {
+						// Don't merge teens with tens: "ten twenty" → separate numbers
+						break
+					}
+				} else {
+					currentValue += value
+				}
 				tokensConsumed += 1
 				i += 1
 				lastWasNumber = true
