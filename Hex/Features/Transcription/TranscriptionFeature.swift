@@ -22,6 +22,7 @@ struct TranscriptionFeature {
     var isRecording: Bool = false
     var isTranscribing: Bool = false
     var isPrewarming: Bool = false
+    var isTransformingAI: Bool = false
     var error: String?
     var recordingStartTime: Date?
     var meter: Meter = .init(averagePower: 0, peakPower: 0)
@@ -53,6 +54,10 @@ struct TranscriptionFeature {
     case transcriptionResult(String, URL)
     case transcriptionError(Error, URL?)
 
+    // AI Transform result flow
+    case aiTransformResult(String, URL, TimeInterval)
+    case aiTransformError(Error, String, URL, TimeInterval)  // (error, originalText, audioURL, duration)
+
     // Model availability
     case modelMissing
   }
@@ -70,6 +75,7 @@ struct TranscriptionFeature {
   @Dependency(\.sleepManagement) var sleepManagement
   @Dependency(\.date.now) var now
   @Dependency(\.transcriptPersistence) var transcriptPersistence
+  @Dependency(\.openAI) var openAI
 
   var body: some ReducerOf<Self> {
     Reduce { state, action in
@@ -120,6 +126,12 @@ struct TranscriptionFeature {
 
       case let .transcriptionError(error, audioURL):
         return handleTranscriptionError(&state, error: error, audioURL: audioURL)
+
+      case let .aiTransformResult(transformedText, audioURL, duration):
+        return handleAITransformResult(&state, transformedText: transformedText, audioURL: audioURL, duration: duration)
+
+      case let .aiTransformError(error, originalText, audioURL, duration):
+        return handleAITransformError(&state, error: error, originalText: originalText, audioURL: audioURL, duration: duration)
 
       case .modelMissing:
         return .none
@@ -450,6 +462,30 @@ private extension TranscriptionFeature {
       return .none
     }
 
+    // Check if AI transforms are enabled
+    let aiTransformEnabled = state.hexSettings.aiTransformEnabled
+    let aiTransformPrompt = state.hexSettings.aiTransformPrompt
+
+    if aiTransformEnabled && !aiTransformPrompt.isEmpty {
+      state.isTransformingAI = true
+      let modelName = state.hexSettings.aiModelName
+      let maxOutputTokens = state.hexSettings.aiMaxOutputTokens
+
+      transcriptionFeatureLogger.info("Starting AI transformation (model: \(modelName))")
+
+      return .run { [openAI] send in
+        do {
+          let transformedText = try await openAI.transformText(modifiedResult, aiTransformPrompt, modelName, maxOutputTokens)
+          await send(.aiTransformResult(transformedText, audioURL, duration))
+        } catch {
+          HexLog.ai.error("AI transformation failed: \(error.localizedDescription, privacy: .public)")
+          await send(.aiTransformError(error, modifiedResult, audioURL, duration))
+        }
+      }
+      .cancellable(id: CancelID.transcription)
+    }
+
+    // No AI transform - proceed with normal finalization
     let sourceAppBundleID = state.sourceAppBundleID
     let sourceAppName = state.sourceAppName
     let transcriptionHistory = state.$transcriptionHistory
@@ -479,12 +515,76 @@ private extension TranscriptionFeature {
     state.isTranscribing = false
     state.isPrewarming = false
     state.error = error.localizedDescription
-    
+
     if let audioURL {
       try? FileManager.default.removeItem(at: audioURL)
     }
 
     return .none
+  }
+
+  func handleAITransformResult(
+    _ state: inout State,
+    transformedText: String,
+    audioURL: URL,
+    duration: TimeInterval
+  ) -> Effect<Action> {
+    state.isTransformingAI = false
+
+    transcriptionFeatureLogger.info("AI transformation complete: '\(transformedText.prefix(100), privacy: .private)...'")
+
+    let sourceAppBundleID = state.sourceAppBundleID
+    let sourceAppName = state.sourceAppName
+    let transcriptionHistory = state.$transcriptionHistory
+
+    return .run { send in
+      do {
+        try await finalizeRecordingAndStoreTranscript(
+          result: transformedText,
+          duration: duration,
+          sourceAppBundleID: sourceAppBundleID,
+          sourceAppName: sourceAppName,
+          audioURL: audioURL,
+          transcriptionHistory: transcriptionHistory
+        )
+      } catch {
+        await send(.transcriptionError(error, audioURL))
+      }
+    }
+    .cancellable(id: CancelID.transcription)
+  }
+
+  func handleAITransformError(
+    _ state: inout State,
+    error: Error,
+    originalText: String,
+    audioURL: URL,
+    duration: TimeInterval
+  ) -> Effect<Action> {
+    state.isTransformingAI = false
+
+    // Fall back to original text on AI transform failure
+    transcriptionFeatureLogger.warning("AI transformation failed, using original text: \(error.localizedDescription)")
+
+    let sourceAppBundleID = state.sourceAppBundleID
+    let sourceAppName = state.sourceAppName
+    let transcriptionHistory = state.$transcriptionHistory
+
+    return .run { send in
+      do {
+        try await finalizeRecordingAndStoreTranscript(
+          result: originalText,
+          duration: duration,
+          sourceAppBundleID: sourceAppBundleID,
+          sourceAppName: sourceAppName,
+          audioURL: audioURL,
+          transcriptionHistory: transcriptionHistory
+        )
+      } catch {
+        await send(.transcriptionError(error, audioURL))
+      }
+    }
+    .cancellable(id: CancelID.transcription)
   }
 
   /// Move file to permanent location, create a transcript record, paste text, and play sound.
@@ -536,6 +636,7 @@ private extension TranscriptionFeature {
     state.isTranscribing = false
     state.isRecording = false
     state.isPrewarming = false
+    state.isTransformingAI = false
 
     return .merge(
       .cancel(id: CancelID.transcription),
@@ -571,7 +672,9 @@ struct TranscriptionView: View {
   @ObserveInjection var inject
 
   var status: TranscriptionIndicatorView.Status {
-    if store.isTranscribing {
+    if store.isTransformingAI {
+      return .transformingAI
+    } else if store.isTranscribing {
       return .transcribing
     } else if store.isRecording {
       return .recording

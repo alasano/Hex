@@ -27,7 +27,7 @@
 			containerPortal = 47E05DE62D444EC600D26DA6 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 47E05DED2D444EC600D26DA6;
-			remoteInfo = Hex;
+			remoteInfo = "Hex AI";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -35,18 +35,18 @@
 		473544502D445936001FBCB5 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
 		473544542D445959001FBCB5 /* Testing.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Testing.framework; path = Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework; sourceTree = DEVELOPER_DIR; };
 		478637A52D48725900319BFA /* HexTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HexTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		47E05DEE2D444EC600D26DA6 /* Hex Debug.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Hex Debug.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		47E05DEE2D444EC600D26DA6 /* Hex AI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Hex AI.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B53355FF2D7B8D4900E5F542 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		B5A1C7E22E6A1C5B00AB1234 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.icon; name = AppIcon.icon; path = Hex/AppIcon.icon; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		476BAD402D47E8500088C61F /* Exceptions for "Hex" folder in "Hex" target */ = {
+		476BAD402D47E8500088C61F /* Exceptions for "Hex" folder in "Hex AI" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 47E05DED2D444EC600D26DA6 /* Hex */;
+			target = 47E05DED2D444EC600D26DA6 /* Hex AI */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -54,7 +54,7 @@
 		47E05DF02D444EC600D26DA6 /* Hex */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				476BAD402D47E8500088C61F /* Exceptions for "Hex" folder in "Hex" target */,
+				476BAD402D47E8500088C61F /* Exceptions for "Hex" folder in "Hex AI" target */,
 			);
 			path = Hex;
 			sourceTree = "<group>";
@@ -113,7 +113,7 @@
 		47E05DEF2D444EC600D26DA6 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				47E05DEE2D444EC600D26DA6 /* Hex Debug.app */,
+				47E05DEE2D444EC600D26DA6 /* Hex AI.app */,
 				478637A52D48725900319BFA /* HexTests.xctest */,
 			);
 			name = Products;
@@ -142,9 +142,9 @@
 			productReference = 478637A52D48725900319BFA /* HexTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		47E05DED2D444EC600D26DA6 /* Hex */ = {
+		47E05DED2D444EC600D26DA6 /* Hex AI */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 47E05DFD2D444EC700D26DA6 /* Build configuration list for PBXNativeTarget "Hex" */;
+			buildConfigurationList = 47E05DFD2D444EC700D26DA6 /* Build configuration list for PBXNativeTarget "Hex AI" */;
 			buildPhases = (
 				47E05DEA2D444EC600D26DA6 /* Sources */,
 				47E05DEB2D444EC600D26DA6 /* Frameworks */,
@@ -157,7 +157,7 @@
 			fileSystemSynchronizedGroups = (
 				47E05DF02D444EC600D26DA6 /* Hex */,
 			);
-			name = Hex;
+			name = "Hex AI";
 			packageProductDependencies = (
 				47E05E012D444EE900D26DA6 /* ComposableArchitecture */,
 				47E05E042D444EF800D26DA6 /* Sauce */,
@@ -171,8 +171,8 @@
 				476316262E5FB31400913CDE /* HexCore */,
 				47E16A612EC6C9D300885CF7 /* FluidAudio */,
 			);
-			productName = Hex;
-			productReference = 47E05DEE2D444EC600D26DA6 /* Hex Debug.app */;
+			productName = "Hex AI";
+			productReference = 47E05DEE2D444EC600D26DA6 /* Hex AI.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -220,7 +220,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				47E05DED2D444EC600D26DA6 /* Hex */,
+				47E05DED2D444EC600D26DA6 /* Hex AI */,
 				478637A42D48725900319BFA /* HexTests */,
 			);
 		};
@@ -264,7 +264,7 @@
 /* Begin PBXTargetDependency section */
 		478637AA2D48725900319BFA /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 47E05DED2D444EC600D26DA6 /* Hex */;
+			target = 47E05DED2D444EC600D26DA6 /* Hex AI */;
 			targetProxy = 478637A92D48725900319BFA /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -278,12 +278,12 @@
 				CURRENT_PROJECT_VERSION = 78;
 				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.6.9;
-				PRODUCT_BUNDLE_IDENTIFIER = com.kitlangton.HexTests;
+				MARKETING_VERSION = 0.7.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alasano.HexTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hex.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hex";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hex AI.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hex AI";
 			};
 			name = Debug;
 		};
@@ -295,12 +295,12 @@
 				CURRENT_PROJECT_VERSION = 78;
 				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.6.9;
-				PRODUCT_BUNDLE_IDENTIFIER = com.kitlangton.HexTests;
+				MARKETING_VERSION = 0.7.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alasano.HexTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hex.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hex";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hex AI.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hex AI";
 			};
 			name = Release;
 		};
@@ -340,7 +340,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = QC99C9JE59;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -406,7 +406,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = QC99C9JE59;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -441,7 +441,7 @@
 				CURRENT_PROJECT_VERSION = 78;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"Hex/Preview Content\"";
-				DEVELOPMENT_TEAM = QC99C9JE59;
+				DEVELOPMENT_TEAM = "";
 				EMIT_FRONTEND_COMMAND_LINES = YES;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -465,13 +465,13 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.6.9;
+				MARKETING_VERSION = 0.7.0;
 				OTHER_LDFLAGS = (
 					"-Xlinker",
 					"-interposable",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.kitlangton.Hex.debug;
-				PRODUCT_NAME = "Hex Debug";
+				PRODUCT_BUNDLE_IDENTIFIER = com.alasano.Hex.debug;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -496,7 +496,7 @@
 				CURRENT_PROJECT_VERSION = 78;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"Hex/Preview Content\"";
-				DEVELOPMENT_TEAM = QC99C9JE59;
+				DEVELOPMENT_TEAM = "";
 				EMIT_FRONTEND_COMMAND_LINES = NO;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -519,8 +519,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.6.9;
-				PRODUCT_BUNDLE_IDENTIFIER = com.kitlangton.Hex;
+				MARKETING_VERSION = 0.7.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alasano.Hex;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
@@ -554,7 +554,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		47E05DFD2D444EC700D26DA6 /* Build configuration list for PBXNativeTarget "Hex" */ = {
+		47E05DFD2D444EC700D26DA6 /* Build configuration list for PBXNativeTarget "Hex AI" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				47E05DFE2D444EC700D26DA6 /* Debug */,

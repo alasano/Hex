@@ -48,6 +48,12 @@ public struct HexSettings: Codable, Equatable, Sendable {
 	public var convertNumberWordsToDigits: Bool
 	public var convertSpokenYearsToDigits: Bool
 
+	// AI Transforms
+	public var aiTransformEnabled: Bool
+	public var aiTransformPrompt: String
+	public var aiModelName: String
+	public var aiMaxOutputTokens: Int
+
 	public init(
 		soundEffectsEnabled: Bool = true,
 		soundEffectsVolume: Double = HexSettings.baseSoundEffectsVolume,
@@ -72,7 +78,11 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		wordRemovals: [WordRemoval] = HexSettings.defaultWordRemovals,
 		wordRemappings: [WordRemapping] = [],
 		convertNumberWordsToDigits: Bool = false,
-		convertSpokenYearsToDigits: Bool = false
+		convertSpokenYearsToDigits: Bool = false,
+		aiTransformEnabled: Bool = false,
+		aiTransformPrompt: String = "",
+		aiModelName: String = "gpt-5-nano",
+		aiMaxOutputTokens: Int = 32768
 	) {
 		self.soundEffectsEnabled = soundEffectsEnabled
 		self.soundEffectsVolume = soundEffectsVolume
@@ -98,6 +108,10 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		self.wordRemappings = wordRemappings
 		self.convertNumberWordsToDigits = convertNumberWordsToDigits
 		self.convertSpokenYearsToDigits = convertSpokenYearsToDigits
+		self.aiTransformEnabled = aiTransformEnabled
+		self.aiTransformPrompt = aiTransformPrompt
+		self.aiModelName = aiModelName
+		self.aiMaxOutputTokens = aiMaxOutputTokens
 	}
 
 	public init(from decoder: Decoder) throws {
@@ -144,6 +158,10 @@ private enum HexSettingKey: String, CodingKey, CaseIterable {
 	case wordRemappings
 	case convertNumberWordsToDigits
 	case convertSpokenYearsToDigits
+	case aiTransformEnabled
+	case aiTransformPrompt
+	case aiModelName
+	case aiMaxOutputTokens
 }
 
 private struct SettingsField<Value: Codable & Sendable> {
@@ -276,6 +294,10 @@ private enum HexSettingsSchema {
 			default: defaults.wordRemappings
 		).eraseToAny(),
 		SettingsField(.convertNumberWordsToDigits, keyPath: \.convertNumberWordsToDigits, default: defaults.convertNumberWordsToDigits).eraseToAny(),
-		SettingsField(.convertSpokenYearsToDigits, keyPath: \.convertSpokenYearsToDigits, default: defaults.convertSpokenYearsToDigits).eraseToAny()
+		SettingsField(.convertSpokenYearsToDigits, keyPath: \.convertSpokenYearsToDigits, default: defaults.convertSpokenYearsToDigits).eraseToAny(),
+		SettingsField(.aiTransformEnabled, keyPath: \.aiTransformEnabled, default: defaults.aiTransformEnabled).eraseToAny(),
+		SettingsField(.aiTransformPrompt, keyPath: \.aiTransformPrompt, default: defaults.aiTransformPrompt).eraseToAny(),
+		SettingsField(.aiModelName, keyPath: \.aiModelName, default: defaults.aiModelName).eraseToAny(),
+		SettingsField(.aiMaxOutputTokens, keyPath: \.aiMaxOutputTokens, default: defaults.aiMaxOutputTokens).eraseToAny()
 	]
 }

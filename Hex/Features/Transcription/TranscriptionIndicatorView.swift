@@ -17,12 +17,14 @@ struct TranscriptionIndicatorView: View {
     case recording
     case transcribing
     case prewarming
+    case transformingAI
   }
 
   var status: Status
   var meter: Meter
 
   let transcribeBaseColor: Color = .blue
+  let aiTransformBaseColor: Color = .purple
   private var backgroundColor: Color {
     switch status {
     case .hidden: return Color.clear
@@ -30,6 +32,7 @@ struct TranscriptionIndicatorView: View {
     case .recording: return .red.mix(with: .black, by: 0.5).mix(with: .red, by: meter.averagePower * 3)
     case .transcribing: return transcribeBaseColor.mix(with: .black, by: 0.5)
     case .prewarming: return transcribeBaseColor.mix(with: .black, by: 0.5)
+    case .transformingAI: return aiTransformBaseColor.mix(with: .black, by: 0.5)
     }
   }
 
@@ -40,6 +43,7 @@ struct TranscriptionIndicatorView: View {
     case .recording: return Color.red.mix(with: .white, by: 0.1).opacity(0.6)
     case .transcribing: return transcribeBaseColor.mix(with: .white, by: 0.1).opacity(0.6)
     case .prewarming: return transcribeBaseColor.mix(with: .white, by: 0.1).opacity(0.6)
+    case .transformingAI: return aiTransformBaseColor.mix(with: .white, by: 0.1).opacity(0.6)
     }
   }
 
@@ -50,6 +54,7 @@ struct TranscriptionIndicatorView: View {
     case .recording: return Color.red
     case .transcribing: return transcribeBaseColor
     case .prewarming: return transcribeBaseColor
+    case .transformingAI: return aiTransformBaseColor
     }
   }
 
@@ -120,13 +125,13 @@ struct TranscriptionIndicatorView: View {
         .changeEffect(.glow(color: .red.opacity(0.5), radius: 8), value: status)
         .changeEffect(.shine(angle: .degrees(0), duration: 0.6), value: transcribeEffect)
         .compositingGroup()
-        .task(id: status == .transcribing) {
-          while status == .transcribing, !Task.isCancelled {
+        .task(id: status == .transcribing || status == .transformingAI) {
+          while (status == .transcribing || status == .transformingAI), !Task.isCancelled {
             transcribeEffect += 1
             try? await Task.sleep(for: .seconds(0.25))
           }
         }
-      
+
       // Show tooltip when prewarming
       if status == .prewarming {
         VStack(spacing: 4) {
@@ -138,6 +143,24 @@ struct TranscriptionIndicatorView: View {
             .background(
               RoundedRectangle(cornerRadius: 4)
                 .fill(Color.black.opacity(0.8))
+            )
+        }
+        .offset(y: -24)
+        .transition(.opacity)
+        .zIndex(2)
+      }
+
+      // Show tooltip when AI transforming
+      if status == .transformingAI {
+        VStack(spacing: 4) {
+          Text("Enhancing with AI...")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+              RoundedRectangle(cornerRadius: 4)
+                .fill(Color.purple.opacity(0.8))
             )
         }
         .offset(y: -24)
@@ -156,6 +179,7 @@ struct TranscriptionIndicatorView: View {
     TranscriptionIndicatorView(status: .recording, meter: .init(averagePower: 0.5, peakPower: 0.5))
     TranscriptionIndicatorView(status: .transcribing, meter: .init(averagePower: 0, peakPower: 0))
     TranscriptionIndicatorView(status: .prewarming, meter: .init(averagePower: 0, peakPower: 0))
+    TranscriptionIndicatorView(status: .transformingAI, meter: .init(averagePower: 0, peakPower: 0))
   }
   .padding(40)
 }
