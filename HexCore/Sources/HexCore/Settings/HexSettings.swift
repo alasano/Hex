@@ -45,6 +45,8 @@ public struct HexSettings: Codable, Equatable, Sendable {
 	public var wordRemovalsEnabled: Bool
 	public var wordRemovals: [WordRemoval]
 	public var wordRemappings: [WordRemapping]
+	public var convertNumberWordsToDigits: Bool
+	public var convertSpokenYearsToDigits: Bool
 
 	// AI Transforms
 	public var aiTransformEnabled: Bool
@@ -75,6 +77,8 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		wordRemovalsEnabled: Bool = false,
 		wordRemovals: [WordRemoval] = HexSettings.defaultWordRemovals,
 		wordRemappings: [WordRemapping] = [],
+		convertNumberWordsToDigits: Bool = false,
+		convertSpokenYearsToDigits: Bool = false,
 		aiTransformEnabled: Bool = false,
 		aiTransformPrompt: String = "",
 		aiModelName: String = "gpt-5-nano",
@@ -102,6 +106,8 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		self.wordRemovalsEnabled = wordRemovalsEnabled
 		self.wordRemovals = wordRemovals
 		self.wordRemappings = wordRemappings
+		self.convertNumberWordsToDigits = convertNumberWordsToDigits
+		self.convertSpokenYearsToDigits = convertSpokenYearsToDigits
 		self.aiTransformEnabled = aiTransformEnabled
 		self.aiTransformPrompt = aiTransformPrompt
 		self.aiModelName = aiModelName
@@ -150,6 +156,8 @@ private enum HexSettingKey: String, CodingKey, CaseIterable {
 	case wordRemovalsEnabled
 	case wordRemovals
 	case wordRemappings
+	case convertNumberWordsToDigits
+	case convertSpokenYearsToDigits
 	case aiTransformEnabled
 	case aiTransformPrompt
 	case aiModelName
@@ -285,6 +293,8 @@ private enum HexSettingsSchema {
 			keyPath: \.wordRemappings,
 			default: defaults.wordRemappings
 		).eraseToAny(),
+		SettingsField(.convertNumberWordsToDigits, keyPath: \.convertNumberWordsToDigits, default: defaults.convertNumberWordsToDigits).eraseToAny(),
+		SettingsField(.convertSpokenYearsToDigits, keyPath: \.convertSpokenYearsToDigits, default: defaults.convertSpokenYearsToDigits).eraseToAny(),
 		SettingsField(.aiTransformEnabled, keyPath: \.aiTransformEnabled, default: defaults.aiTransformEnabled).eraseToAny(),
 		SettingsField(.aiTransformPrompt, keyPath: \.aiTransformPrompt, default: defaults.aiTransformPrompt).eraseToAny(),
 		SettingsField(.aiModelName, keyPath: \.aiModelName, default: defaults.aiModelName).eraseToAny(),

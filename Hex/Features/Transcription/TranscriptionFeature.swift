@@ -437,6 +437,20 @@ private extension TranscriptionFeature {
         }
         output = removedResult
       }
+      if state.hexSettings.convertSpokenYearsToDigits {
+        let convertedYearResult = YearWordConverter.apply(output)
+        if convertedYearResult != output {
+          transcriptionFeatureLogger.info("Applied spoken year to digit conversion")
+        }
+        output = convertedYearResult
+      }
+      if state.hexSettings.convertNumberWordsToDigits {
+        let convertedResult = NumberWordConverter.apply(output)
+        if convertedResult != output {
+          transcriptionFeatureLogger.info("Applied number word to digit conversion")
+        }
+        output = convertedResult
+      }
       let remappedResult = WordRemappingApplier.apply(output, remappings: remappings)
       if remappedResult != output {
         transcriptionFeatureLogger.info("Applied \(remappings.count) word remapping(s)")
