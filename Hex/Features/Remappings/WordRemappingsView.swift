@@ -126,6 +126,13 @@ struct WordRemappingsView: View {
 					} icon: {
 						Image(systemName: "textformat.123")
 					}
+
+					Label {
+						Toggle("Convert spoken years to digits", isOn: $store.hexSettings.convertSpokenYearsToDigits)
+						Text("Converts English years like \"twenty twenty one\" to \"2021\"")
+					} icon: {
+						Image(systemName: "calendar")
+					}
 				}
 			}
 			.formStyle(.grouped)
@@ -218,6 +225,9 @@ struct WordRemappingsView: View {
 		var output = store.remappingScratchpadText
 		if store.hexSettings.wordRemovalsEnabled {
 			output = WordRemovalApplier.apply(output, removals: store.hexSettings.wordRemovals)
+		}
+		if store.hexSettings.convertSpokenYearsToDigits {
+			output = YearWordConverter.apply(output)
 		}
 		if store.hexSettings.convertNumberWordsToDigits {
 			output = NumberWordConverter.apply(output)

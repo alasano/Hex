@@ -425,6 +425,13 @@ private extension TranscriptionFeature {
         }
         output = removedResult
       }
+      if state.hexSettings.convertSpokenYearsToDigits {
+        let convertedYearResult = YearWordConverter.apply(output)
+        if convertedYearResult != output {
+          transcriptionFeatureLogger.info("Applied spoken year to digit conversion")
+        }
+        output = convertedYearResult
+      }
       if state.hexSettings.convertNumberWordsToDigits {
         let convertedResult = NumberWordConverter.apply(output)
         if convertedResult != output {
