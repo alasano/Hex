@@ -16,8 +16,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "47E05DED2D444EC600D26DA6"
-               BuildableName = "Hex.app"
-               BlueprintName = "Hex"
+               BuildableName = "Hex AI.app"
+               BlueprintName = "Hex AI"
                ReferencedContainer = "container:Hex.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -58,8 +58,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "47E05DED2D444EC600D26DA6"
-            BuildableName = "Hex.app"
-            BlueprintName = "Hex"
+            BuildableName = "Hex AI.app"
+            BlueprintName = "Hex AI"
             ReferencedContainer = "container:Hex.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -87,8 +87,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "47E05DED2D444EC600D26DA6"
-            BuildableName = "Hex.app"
-            BlueprintName = "Hex"
+            BuildableName = "Hex AI.app"
+            BlueprintName = "Hex AI"
             ReferencedContainer = "container:Hex.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
