@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0
+
+### Minor Changes
+
+- 30ca7fa: Backfill: add AI transcript transforms in settings and transcription flow (commit d53b16c)
+- 5c023ed: Add option to convert spoken number words to digits (ported from upstream PR #155)
+- 30ca7fa: Add optional spoken year conversion toggle (e.g. "twenty twenty one" → "2021") plus conservative parsing safeguards
+
 ## 0.6.9
 
 ### Patch Changes

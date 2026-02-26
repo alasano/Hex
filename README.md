@@ -8,7 +8,10 @@ Fork of [kitlangton/Hex](https://github.com/kitlangton/Hex) with AI text transfo
 
 - On-device transcription via [Parakeet TDT v3](https://github.com/FluidInference/FluidAudio) (default) and [WhisperKit](https://github.com/argmaxinc/WhisperKit)
 - AI transforms — apply custom prompts to transcriptions before pasting
-- Word remappings and filler word removal
+- Transcript modifications:
+  - Word remappings and filler word removal
+  - Convert spoken number words to digits (e.g. "version one point two" → `version 1.2`)
+  - Convert spoken years to digits (e.g. "twenty twenty four" → `2024`)
 - Global hotkey with press-and-hold or double-tap modes
 - Built with [Swift Composable Architecture](https://github.com/pointfreeco/swift-composable-architecture)
 
