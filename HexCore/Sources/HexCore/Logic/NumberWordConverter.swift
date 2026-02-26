@@ -48,6 +48,14 @@ public enum NumberWordConverter {
 
 			// Check if this token starts a number sequence
 			if isNumberWord(lower) || isLeadingDecimalMarker(tokens: tokens, at: i) {
+				// Prefer version-like parsing when we have 2+ separators (e.g. "zero point seven point zero" -> "0.7.0")
+				let (versionTokens, versionValue) = parseVersionLikeSequence(tokens: tokens, startIndex: i)
+				if versionTokens > 0, let versionValue {
+					result.append(versionValue)
+					i += versionTokens
+					continue
+				}
+
 				let (numberTokens, value, hasDecimal, decimalValue) = parseNumberSequence(tokens: tokens, startIndex: i)
 
 				if numberTokens > 0 {
@@ -159,6 +167,46 @@ public enum NumberWordConverter {
 		return isDecimalDigitWord(tokens[next].lowercased())
 	}
 
+	private static func isVersionSeparator(_ token: String) -> Bool {
+		let lower = token.lowercased()
+		return lower == "point" || lower == "dot"
+	}
+
+	private static func parseVersionLikeSequence(tokens: [String], startIndex: Int) -> (Int, String?) {
+		var i = startIndex
+		var segments: [String] = []
+		var separatorCount = 0
+
+		while i < tokens.count {
+			let (segmentTokens, segmentValue, hasDecimal, _) = parseNumberSequence(tokens: tokens, startIndex: i, allowDecimal: false)
+			guard segmentTokens > 0, !hasDecimal else { break }
+			segments.append(String(segmentValue))
+			i += segmentTokens
+
+			let afterSegment = i
+			while i < tokens.count, tokens[i].allSatisfy({ $0.isWhitespace }) {
+				i += 1
+			}
+
+			guard i < tokens.count, isVersionSeparator(tokens[i]) else {
+				i = afterSegment
+				break
+			}
+
+			separatorCount += 1
+			i += 1
+			while i < tokens.count, tokens[i].allSatisfy({ $0.isWhitespace }) {
+				i += 1
+			}
+		}
+
+		guard separatorCount >= 2, segments.count == separatorCount + 1 else {
+			return (0, nil)
+		}
+
+		return (i - startIndex, segments.joined(separator: "."))
+	}
+
 	private static func trimTrailingWhitespace(tokens: [String], startIndex: Int, consumedCount: Int) -> Int {
 		var trimmed = consumedCount
 		while trimmed > 0 {
@@ -174,7 +222,7 @@ public enum NumberWordConverter {
 
 	/// Parses a sequence of number words starting at the given index.
 	/// Returns: (tokensConsumed, integerValue, hasDecimal, decimalString)
-	private static func parseNumberSequence(tokens: [String], startIndex: Int) -> (Int, Int, Bool, String) {
+	private static func parseNumberSequence(tokens: [String], startIndex: Int, allowDecimal: Bool = true) -> (Int, Int, Bool, String) {
 		var tokensConsumed = 0
 		var currentValue = 0
 		var total = 0
@@ -203,7 +251,7 @@ public enum NumberWordConverter {
 					if inDecimal {
 						canContinue = isDecimalDigitWord(nextLower)
 					} else {
-						canContinue = isNumberWord(nextLower) || nextLower == "point" || (connectors.contains(nextLower) && sawScaleInSequence)
+						canContinue = isNumberWord(nextLower) || (allowDecimal && nextLower == "point") || (connectors.contains(nextLower) && sawScaleInSequence)
 					}
 					if canContinue {
 						tokensConsumed += 1
@@ -215,7 +263,7 @@ public enum NumberWordConverter {
 			}
 
 			// Handle "point" for decimals, including leading decimals ("point five")
-			if lower == "point" && !inDecimal {
+			if allowDecimal && lower == "point" && !inDecimal {
 				let canStartDecimal = lastWasNumber || tokensConsumed == 0
 				guard canStartDecimal else { break }
 

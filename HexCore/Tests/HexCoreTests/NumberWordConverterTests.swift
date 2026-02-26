@@ -134,6 +134,13 @@ struct NumberWordConverterTests {
 		#expect(NumberWordConverter.apply("I have one, two, and three") == "I have 1, 2, and 3")
 	}
 
+	@Test
+	func handlesVersionLikeMultiPointPhrases() {
+		#expect(NumberWordConverter.apply("zero point seven point zero") == "0.7.0")
+		#expect(NumberWordConverter.apply("version one point two point three") == "version 1.2.3")
+		#expect(NumberWordConverter.apply("one point two") == "1.2")
+	}
+
 	// MARK: - Mixed Text
 
 	@Test
