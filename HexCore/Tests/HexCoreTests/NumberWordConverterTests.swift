@@ -91,6 +91,49 @@ struct NumberWordConverterTests {
 		#expect(NumberWordConverter.apply("three point one four one five nine") == "3.14159")
 	}
 
+	@Test
+	func handlesLeadingAndTrailingDecimalPointCases() {
+		#expect(NumberWordConverter.apply("point five") == "0.5")
+		#expect(NumberWordConverter.apply("one point") == "1")
+	}
+
+	// MARK: - Ambiguous Phrases
+
+	@Test
+	func doesNotMergeAndSeparatedNumbers() {
+		#expect(NumberWordConverter.apply("one and two") == "1 and 2")
+		#expect(NumberWordConverter.apply("between one and two") == "between 1 and 2")
+		#expect(NumberWordConverter.apply("I want you to implement phase one and two") == "I want you to implement phase 1 and 2")
+	}
+
+	@Test
+	func keepsAdjacentTensAsSeparateNumbersByDefault() {
+		#expect(NumberWordConverter.apply("twenty twenty one") == "20 21")
+	}
+
+	@Test
+	func handlesArticlesAndStandaloneScales() {
+		#expect(NumberWordConverter.apply("a hundred") == "a 100")
+		#expect(NumberWordConverter.apply("hundred") == "100")
+	}
+
+	@Test
+	func handlesIncompleteScalePhrasesWithoutManglingText() {
+		#expect(NumberWordConverter.apply("one thousand and") == "1000 and")
+	}
+
+	@Test
+	func handlesSmallLeadingDecimals() {
+		#expect(NumberWordConverter.apply("point zero one") == "0.01")
+	}
+
+	@Test
+	func handlesCommonMixedContextPhrases() {
+		#expect(NumberWordConverter.apply("version one point two") == "version 1.2")
+		#expect(NumberWordConverter.apply("chapter twenty-one") == "chapter 21")
+		#expect(NumberWordConverter.apply("I have one, two, and three") == "I have 1, 2, and 3")
+	}
+
 	// MARK: - Mixed Text
 
 	@Test

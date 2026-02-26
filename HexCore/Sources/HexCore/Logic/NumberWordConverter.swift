@@ -44,9 +44,10 @@ public enum NumberWordConverter {
 
 		while i < tokens.count {
 			let token = tokens[i]
+			let lower = token.lowercased()
 
 			// Check if this token starts a number sequence
-			if isNumberWord(token.lowercased()) {
+			if isNumberWord(lower) || isLeadingDecimalMarker(tokens: tokens, at: i) {
 				let (numberTokens, value, hasDecimal, decimalValue) = parseNumberSequence(tokens: tokens, startIndex: i)
 
 				if numberTokens > 0 {
@@ -104,6 +105,12 @@ public enum NumberWordConverter {
 		case punctuation
 	}
 
+	private enum ParsedKind {
+		case ones
+		case tens
+		case scale
+	}
+
 	private static func tokenType(for char: Character) -> TokenType {
 		if char.isWhitespace {
 			return .whitespace
@@ -127,6 +134,44 @@ public enum NumberWordConverter {
 		return ones[word] != nil || tens[word] != nil || scales[word] != nil
 	}
 
+	private static func isDecimalDigitWord(_ word: String) -> Bool {
+		if let value = ones[word] {
+			return (0...9).contains(value)
+		}
+		return false
+	}
+
+	private static func nextNonWhitespaceIndex(tokens: [String], from index: Int) -> Int? {
+		var i = index
+		while i < tokens.count {
+			if tokens[i].allSatisfy({ $0.isWhitespace }) {
+				i += 1
+				continue
+			}
+			return i
+		}
+		return nil
+	}
+
+	private static func isLeadingDecimalMarker(tokens: [String], at index: Int) -> Bool {
+		guard tokens[index].lowercased() == "point" else { return false }
+		guard let next = nextNonWhitespaceIndex(tokens: tokens, from: index + 1) else { return false }
+		return isDecimalDigitWord(tokens[next].lowercased())
+	}
+
+	private static func trimTrailingWhitespace(tokens: [String], startIndex: Int, consumedCount: Int) -> Int {
+		var trimmed = consumedCount
+		while trimmed > 0 {
+			let token = tokens[startIndex + trimmed - 1]
+			if token.allSatisfy({ $0.isWhitespace }) {
+				trimmed -= 1
+			} else {
+				break
+			}
+		}
+		return trimmed
+	}
+
 	/// Parses a sequence of number words starting at the given index.
 	/// Returns: (tokensConsumed, integerValue, hasDecimal, decimalString)
 	private static func parseNumberSequence(tokens: [String], startIndex: Int) -> (Int, Int, Bool, String) {
@@ -141,6 +186,10 @@ public enum NumberWordConverter {
 		var decimalString = ""
 		var inDecimal = false
 
+		// Conservative parsing guards
+		var sawScaleInSequence = false
+		var lastParsedKind: ParsedKind?
+
 		while i < tokens.count {
 			let token = tokens[i]
 			let lower = token.lowercased()
@@ -148,42 +197,51 @@ public enum NumberWordConverter {
 			// Skip whitespace between number words
 			if token.allSatisfy({ $0.isWhitespace }) {
 				if lastWasNumber || inDecimal {
-					// Peek ahead to see if next non-whitespace continues the number sequence
-					var nextIndex = i + 1
-					while nextIndex < tokens.count && tokens[nextIndex].allSatisfy({ $0.isWhitespace }) {
-						nextIndex += 1
+					guard let nextIndex = nextNonWhitespaceIndex(tokens: tokens, from: i + 1) else { break }
+					let nextLower = tokens[nextIndex].lowercased()
+					let canContinue: Bool
+					if inDecimal {
+						canContinue = isDecimalDigitWord(nextLower)
+					} else {
+						canContinue = isNumberWord(nextLower) || nextLower == "point" || (connectors.contains(nextLower) && sawScaleInSequence)
 					}
-					if nextIndex < tokens.count {
-						let nextLower = tokens[nextIndex].lowercased()
-						let canContinue: Bool
-						if inDecimal {
-							canContinue = ones[nextLower] != nil
-						} else {
-							canContinue = isNumberWord(nextLower) || connectors.contains(nextLower) || nextLower == "point"
-						}
-						if canContinue {
-							tokensConsumed += 1
-							i += 1
-							continue
-						}
+					if canContinue {
+						tokensConsumed += 1
+						i += 1
+						continue
 					}
 				}
 				break
 			}
 
-			// Handle "point" for decimals
-			if lower == "point" && lastWasNumber && !inDecimal {
-				inDecimal = true
-				hasDecimal = true
-				tokensConsumed += 1
-				i += 1
-				lastWasNumber = false
-				continue
+			// Handle "point" for decimals, including leading decimals ("point five")
+			if lower == "point" && !inDecimal {
+				let canStartDecimal = lastWasNumber || tokensConsumed == 0
+				guard canStartDecimal else { break }
+
+				if let nextIndex = nextNonWhitespaceIndex(tokens: tokens, from: i + 1),
+					isDecimalDigitWord(tokens[nextIndex].lowercased())
+				{
+					inDecimal = true
+					hasDecimal = true
+					tokensConsumed += 1
+					i += 1
+					lastWasNumber = false
+					continue
+				}
+
+				// Trailing decimal marker with no digits ("one point"):
+				// consume marker and keep integer part as-is.
+				if lastWasNumber {
+					tokensConsumed += 1
+					i += 1
+				}
+				break
 			}
 
 			// Handle decimal digits (after "point")
 			if inDecimal {
-				if let digitValue = ones[lower], digitValue <= 9 {
+				if let digitValue = ones[lower], (0...9).contains(digitValue) {
 					decimalString.append(String(digitValue))
 					tokensConsumed += 1
 					i += 1
@@ -195,8 +253,11 @@ public enum NumberWordConverter {
 				}
 			}
 
-			// Handle connectors like "and"
-			if connectors.contains(lower) && lastWasNumber {
+			// Handle connectors like "and" (conservative: only in scale contexts)
+			if connectors.contains(lower) && lastWasNumber && sawScaleInSequence {
+				guard let nextIndex = nextNonWhitespaceIndex(tokens: tokens, from: i + 1), isNumberWord(tokens[nextIndex].lowercased()) else {
+					break
+				}
 				tokensConsumed += 1
 				i += 1
 				continue
@@ -209,24 +270,35 @@ public enum NumberWordConverter {
 				tokensConsumed += 1
 				i += 1
 				lastWasNumber = true
+				lastParsedKind = .tens
 				continue
 			}
 
 			// Handle ones (0-19)
 			if let value = ones[lower] {
+				// Avoid merging ambiguous multi-number sequences like "one and two" or "twenty twenty one"
+				if let lastParsedKind, lastParsedKind == .ones, !sawScaleInSequence, tokensConsumed > 0 {
+					break
+				}
 				currentValue += value
 				tokensConsumed += 1
 				i += 1
 				lastWasNumber = true
+				lastParsedKind = .ones
 				continue
 			}
 
 			// Handle tens (20, 30, ... 90)
 			if let value = tens[lower] {
+				// Keep default mode conservative: don't collapse adjacent tens into one number.
+				if let lastParsedKind, lastParsedKind == .tens, !sawScaleInSequence, tokensConsumed > 0 {
+					break
+				}
 				currentValue += value
 				tokensConsumed += 1
 				i += 1
 				lastWasNumber = true
+				lastParsedKind = .tens
 				continue
 			}
 
@@ -244,6 +316,8 @@ public enum NumberWordConverter {
 				tokensConsumed += 1
 				i += 1
 				lastWasNumber = true
+				sawScaleInSequence = true
+				lastParsedKind = .scale
 				continue
 			}
 
@@ -253,9 +327,11 @@ public enum NumberWordConverter {
 
 		total += currentValue
 
+		let effectiveConsumed = trimTrailingWhitespace(tokens: tokens, startIndex: startIndex, consumedCount: tokensConsumed)
+
 		// Only return consumed tokens if we actually parsed a number
-		if tokensConsumed > 0 && (hasDecimal || total > 0 || (tokensConsumed == 1 && tokens[startIndex].lowercased() == "zero")) {
-			return (tokensConsumed, total, hasDecimal, decimalString)
+		if effectiveConsumed > 0 && (hasDecimal || total > 0 || (effectiveConsumed == 1 && tokens[startIndex].lowercased() == "zero")) {
+			return (effectiveConsumed, total, hasDecimal, decimalString)
 		}
 
 		return (0, 0, false, "")
@@ -264,7 +340,7 @@ public enum NumberWordConverter {
 	/// Formats a decimal number.
 	private static func formatDecimal(_ intPart: Int, _ decimalPart: String) -> String {
 		if decimalPart.isEmpty {
-			return "\(intPart)."
+			return "\(intPart)"
 		}
 		return "\(intPart).\(decimalPart)"
 	}
