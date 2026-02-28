@@ -92,5 +92,5 @@ The workflows include placeholders for Sparkle appcast updates. To enable:
 
 - The CI workflow runs on every push and PR for quick feedback
 - Release builds are only created for version tags or manual triggers
-- All builds target macOS 15+ and Apple Silicon
+- All builds target macOS 26+ and Apple Silicon
 - SwiftLint is configured but set to continue on error to avoid blocking PRs

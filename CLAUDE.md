@@ -87,7 +87,7 @@ The app uses **The Composable Architecture (TCA)** for state management. Key arc
 
 ## Building & Running
 
-- macOS 14+, Xcode 15+
+- macOS 26+, Xcode 16+
 
 ### Packages
 
