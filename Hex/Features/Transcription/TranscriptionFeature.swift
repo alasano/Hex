@@ -449,14 +449,16 @@ private extension TranscriptionFeature {
     state.isPrewarming = true
 
     return .run { [sleepManagement] send in
-      // Allow system to sleep again
-      await sleepManagement.allowSleep()
-
+      // Stop recording FIRST so the actor call arrives before any
+      // subsequent startRecording from a rapid re-press. Pre-work
+      // (sleep/sound) delays the call and causes out-of-order arrival.
       var audioURL: URL?
       do {
-        soundEffect.play(.stopRecording)
         let capturedURL = await recording.stopRecording()
         audioURL = capturedURL
+
+        await sleepManagement.allowSleep()
+        soundEffect.play(.stopRecording)
 
         // Create transcription options with the selected language
         // Note: cap concurrency to avoid audio I/O overloads on some Macs
@@ -734,11 +736,11 @@ private extension TranscriptionFeature {
     return .merge(
       .cancel(id: CancelID.transcription),
       .run { [sleepManagement] _ in
-        // Allow system to sleep again
-        await sleepManagement.allowSleep()
-        // Stop the recording to release microphone access
+        // Stop recording FIRST so the actor call arrives before any
+        // subsequent startRecording from a rapid re-press.
         let url = await recording.stopRecording()
         try? FileManager.default.removeItem(at: url)
+        await sleepManagement.allowSleep()
         soundEffect.play(.cancel)
       }
     )
@@ -751,10 +753,11 @@ private extension TranscriptionFeature {
 
     // Silently discard - no sound effect
     return .run { [sleepManagement] _ in
-      // Allow system to sleep again
-      await sleepManagement.allowSleep()
+      // Stop recording FIRST so the actor call arrives before any
+      // subsequent startRecording from a rapid re-press.
       let url = await recording.stopRecording()
       try? FileManager.default.removeItem(at: url)
+      await sleepManagement.allowSleep()
     }
   }
 }

@@ -289,7 +289,15 @@ actor RecordingClientLive {
   private var isRecorderPrimedForNextSession = false
   private var lastPrimedDeviceID: AudioDeviceID?
   private var recordingSessionID: UUID?
-  private var mediaControlTask: Task<Void, Never>?
+
+  /// Outcome returned by start-time media control work (pause/mute).
+  private struct MediaControlOutcome {
+    var pausedPlayers: [String] = []
+    var didPauseMedia: Bool = false
+    var previousVolume: Float?
+  }
+
+  private var mediaControlTask: Task<MediaControlOutcome, Never>?
   private let recorderSettings: [String: Any] = [
     AVFormatIDKey: Int(kAudioFormatLinearPCM),
     AVSampleRateKey: 16000.0,
@@ -312,6 +320,23 @@ actor RecordingClientLive {
 
   /// Tracks previous system volume when muted for recording
   private var previousVolume: Float?
+
+  /// Bundles the info needed to resume media after recording.
+  private struct PendingMediaResume {
+    let task: Task<Void, Never>
+    let players: [String]
+    let didPauseMedia: Bool
+    let previousVolume: Float?
+  }
+
+  /// The in-flight resume from the most recent stopRecording().
+  /// Stored so startRecording() can cancel + inherit its payload.
+  private var pendingResume: PendingMediaResume?
+
+  /// Monotonic counter incremented on each startRecording().
+  /// Resume Tasks capture the current value and bail if it changed,
+  /// preventing stale side-effects from firing during a later session.
+  private var mediaGeneration: UInt64 = 0
 
   // Cache to store already-processed device information
   private var deviceCache: [AudioDeviceID: (hasInput: Bool, name: String?)] = [:]
@@ -691,24 +716,55 @@ actor RecordingClientLive {
 
     let sessionID = UUID()
     recordingSessionID = sessionID
+
+    // Advance generation — invalidates any in-flight resume Task's guards.
+    mediaGeneration &+= 1
+
+    // If a previous session's resume is still pending, cancel it and
+    // carry forward its payload. The media is still paused/muted from
+    // that session; the new session must remember what to resume.
+    let inherited = pendingResume
+    pendingResume?.task.cancel()
+    pendingResume = nil
+
     mediaControlTask?.cancel()
     mediaControlTask = nil
+
+    // Carry forward ALL inherited state unconditionally before checking
+    // the current mode. This handles cross-mode switches (e.g. prior session
+    // used .pauseMedia, current uses .mute) — the final stop will restore
+    // everything.
+    if let inherited {
+      if !inherited.players.isEmpty { pausedPlayers = inherited.players }
+      if inherited.didPauseMedia { didPauseMedia = true }
+      if inherited.previousVolume != nil && previousVolume == nil {
+        previousVolume = inherited.previousVolume
+      }
+    }
 
     // Handle audio behavior based on user preference
     switch hexSettings.recordingAudioBehavior {
     case .pauseMedia:
       // Pause media in background - don't block recording from starting
       mediaControlTask = Task { [sessionID] in
-        guard await self.isCurrentSession(sessionID) else { return }
+        guard await self.isCurrentSession(sessionID) else { return MediaControlOutcome() }
 
         // 1. Try AppleScript — targets specific known media players.
         let result = await pauseAllMediaApplications()
-        await self.updatePausedPlayers(result.pausedPlayers, sessionID: sessionID)
+        var outcome = MediaControlOutcome(pausedPlayers: result.pausedPlayers)
 
-        guard await self.isCurrentSession(sessionID) else { return }
+        // Merge with inherited players (set union). If AppleScript found nothing
+        // new to pause (player already paused from prior session), inherited
+        // state is preserved. If it found new players, both sets are kept.
+        await self.mergePausedPlayers(result.pausedPlayers, sessionID: sessionID)
+
+        // Session may have changed while AppleScript was running. Return what
+        // already happened so stopRecording can still carry this forward.
+        guard await self.isCurrentSession(sessionID) else { return outcome }
+
         if !result.pausedPlayers.isEmpty {
           mediaLogger.notice("Paused media players via AppleScript")
-          return
+          return outcome
         }
 
         // A known player is running but already paused — nothing to do.
@@ -716,27 +772,40 @@ actor RecordingClientLive {
         // would START playback.
         if result.knownPlayerRunning {
           mediaLogger.notice("Known media player running but not playing; skipping media key")
-          return
+          return outcome
         }
 
         // 2. No known player running — try the media key for browser-based
         //    or other audio sources. Only send if audio is actually playing
         //    on the output device.
+        // Skip if we already have inherited or current pause state.
+        if await self.hasActiveOrInheritedPauseState() { return outcome }
+
         if await isAudioPlayingOnDefaultOutput() {
           mediaLogger.notice("No known player running; detected audio on output; sending media key")
           await MainActor.run {
             sendMediaKey()
           }
           await self.setDidPauseMedia(true, sessionID: sessionID)
+          outcome.didPauseMedia = true
         }
+
+        return outcome
       }
 
     case .mute:
-      // Mute system volume in background
-      mediaControlTask = Task { [sessionID] in
-        guard await self.isCurrentSession(sessionID) else { return }
-        let volume = await self.muteSystemVolume()
-        await self.setPreviousVolume(volume, sessionID: sessionID)
+      if previousVolume != nil {
+        // Volume already inherited from cancelled resume — system is already muted.
+        // Keep the original pre-mute volume for correct restoration.
+        mediaLogger.notice("Volume already muted from prior session; carrying forward")
+      } else {
+        // Mute system volume in background
+        mediaControlTask = Task { [sessionID] in
+          guard await self.isCurrentSession(sessionID) else { return MediaControlOutcome() }
+          let volume = await self.muteSystemVolume()
+          await self.setPreviousVolume(volume, sessionID: sessionID)
+          return MediaControlOutcome(previousVolume: volume)
+        }
       }
 
     case .doNothing:
@@ -800,13 +869,9 @@ actor RecordingClientLive {
     let wasRecording = recorder?.isRecording == true
     recorder?.stop()
     stopMeterTask()
-    endRecordingSession()
-    if wasRecording {
-      recordingLogger.notice("Recording stopped")
-    } else {
-      recordingLogger.notice("stopRecording() called while recorder was idle")
-    }
 
+    // Export immediately so this stop call returns a stable URL even if
+    // a new recording session starts while we await media work.
     var exportedURL = recordingURL
     var didCopyRecording = false
     do {
@@ -815,6 +880,38 @@ actor RecordingClientLive {
     } catch {
       isRecorderPrimedForNextSession = false
       recordingLogger.error("Failed to copy recording: \(error.localizedDescription)")
+    }
+
+    // Capture the session we're stopping and detach the media task reference
+    // so a concurrent startRecording won't have its NEW task cancelled by
+    // this stop flow when it ends.
+    let stoppingSessionID = recordingSessionID
+    let mediaTask = mediaControlTask
+    mediaControlTask = nil
+
+    // Await the in-flight media control task (pause/mute) so we can merge
+    // its actual outcome even if state writes were blocked by session guards.
+    let mediaOutcome: MediaControlOutcome
+    if let mediaTask {
+      mediaOutcome = await mediaTask.value
+    } else {
+      mediaOutcome = MediaControlOutcome()
+    }
+
+    // If a new session started during the await (actor reentrancy), don't
+    // clobber it. Carry forward what we learned so the newer session can
+    // resume correctly when it ends.
+    guard recordingSessionID == stoppingSessionID else {
+      recordingLogger.notice("stopRecording preempted by new session; carrying media outcome forward")
+      mergeMediaOutcomeIntoState(mediaOutcome)
+      return exportedURL
+    }
+
+    endRecordingSession()
+    if wasRecording {
+      recordingLogger.notice("Recording stopped")
+    } else {
+      recordingLogger.notice("stopRecording() called while recorder was idle")
     }
 
     if didCopyRecording {
@@ -827,33 +924,56 @@ actor RecordingClientLive {
     }
 
     // Resume audio in background - don't block stop from completing
-    let playersToResume = pausedPlayers
-    let shouldResumeMedia = didPauseMedia
-    let volumeToRestore = previousVolume
+    var playersToResume = pausedPlayers
+    if !mediaOutcome.pausedPlayers.isEmpty {
+      playersToResume = Array(Set(playersToResume).union(mediaOutcome.pausedPlayers))
+    }
+    let shouldResumeMedia = didPauseMedia || mediaOutcome.didPauseMedia
+    let volumeToRestore = previousVolume ?? mediaOutcome.previousVolume
+    clearMediaState()
 
     if !playersToResume.isEmpty || shouldResumeMedia || volumeToRestore != nil {
-      Task {
-        // Restore volume if it was muted
+      // Cancel any existing pending resume before creating a new one.
+      // This prevents orphaned tasks if stopRecording() is called
+      // multiple times without an intervening start (e.g. handleCancel).
+      pendingResume?.task.cancel()
+
+      let generation = mediaGeneration
+      let task = Task {
+        // Generation guard: bail if a new session started since we were spawned.
+        guard await self.isCurrentGeneration(generation) else { return }
+
+        // Volume and player resume are independent — handles cross-mode
+        // carry-forward where both may be set from different sessions.
         if let volume = volumeToRestore {
           await self.restoreSystemVolume(volume)
         }
-        // Resume media if we previously paused specific players
-        else if !playersToResume.isEmpty {
+
+        guard await self.isCurrentGeneration(generation) else { return }
+
+        if !playersToResume.isEmpty {
           mediaLogger.notice("Resuming players: \(playersToResume.joined(separator: ", "))")
           await resumeMediaApplications(playersToResume)
-        }
-        // Resume generic media if we paused it with the media key
-        else if shouldResumeMedia {
+        } else if shouldResumeMedia {
+          // Media key is mutually exclusive with AppleScript player resume.
+          // Only send when no known players were involved (avoids double-toggle).
           await MainActor.run {
             sendMediaKey()
           }
           mediaLogger.notice("Resuming media via media key")
         }
 
-        // Clear the flags
-        self.clearMediaState()
+        await self.clearPendingResumeIfCurrent(generation)
       }
+      pendingResume = PendingMediaResume(
+        task: task,
+        players: playersToResume,
+        didPauseMedia: shouldResumeMedia,
+        previousVolume: volumeToRestore
+      )
     }
+    // else: no payload to resume. Leave existing pendingResume alone —
+    // it may still need to complete (e.g. handleCancel called stop while idle).
 
     return exportedURL
   }
@@ -893,6 +1013,43 @@ actor RecordingClientLive {
     pausedPlayers = []
     didPauseMedia = false
     previousVolume = nil
+  }
+
+  private func mergeMediaOutcomeIntoState(_ outcome: MediaControlOutcome) {
+    if !outcome.pausedPlayers.isEmpty {
+      pausedPlayers = Array(Set(pausedPlayers).union(outcome.pausedPlayers))
+    }
+    if outcome.didPauseMedia {
+      didPauseMedia = true
+    }
+    if previousVolume == nil, let volume = outcome.previousVolume {
+      previousVolume = volume
+    }
+  }
+
+  private func isCurrentGeneration(_ generation: UInt64) -> Bool {
+    mediaGeneration == generation
+  }
+
+  private func clearPendingResumeIfCurrent(_ generation: UInt64) {
+    guard mediaGeneration == generation else { return }
+    pendingResume = nil
+  }
+
+  /// Merges newly paused players with any inherited paused players (set union).
+  /// A prior session may have paused Spotify while this session's check also
+  /// paused Music — both need to be resumed when this session ends.
+  private func mergePausedPlayers(_ newPlayers: [String], sessionID: UUID) {
+    guard recordingSessionID == sessionID else { return }
+    if newPlayers.isEmpty { return }
+    let merged = Array(Set(pausedPlayers).union(newPlayers))
+    pausedPlayers = merged
+  }
+
+  /// True if the current session has any active or inherited pause state.
+  /// Used to suppress the media-key fallback when prior state already covers resume.
+  private func hasActiveOrInheritedPauseState() -> Bool {
+    !pausedPlayers.isEmpty || didPauseMedia
   }
 
   private enum RecorderPreparationError: Error {
@@ -993,6 +1150,8 @@ actor RecordingClientLive {
   /// Release recorder resources. Call on app termination.
   func cleanup() {
     endRecordingSession()
+    pendingResume?.task.cancel()
+    pendingResume = nil
     if let recorder = recorder {
       if recorder.isRecording {
         recorder.stop()
