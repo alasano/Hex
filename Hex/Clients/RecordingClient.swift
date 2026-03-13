@@ -57,43 +57,6 @@ struct Meter: Equatable {
   let peakPower: Double
 }
 
-func isAudioPlayingOnDefaultOutput() async -> Bool {
-  // Use Core Audio to check if the default output device has active audio.
-  var deviceID = AudioDeviceID(0)
-  var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-  var address = AudioObjectPropertyAddress(
-    mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-    mScope: kAudioObjectPropertyScopeGlobal,
-    mElement: kAudioObjectPropertyElementMain
-  )
-
-  var status = AudioObjectGetPropertyData(
-    AudioObjectID(kAudioObjectSystemObject),
-    &address,
-    0,
-    nil,
-    &size,
-    &deviceID
-  )
-
-  guard status == noErr else {
-    mediaLogger.error("Failed to get default output device: \(status)")
-    return false
-  }
-
-  var isRunning: UInt32 = 0
-  size = UInt32(MemoryLayout<UInt32>.size)
-  address.mSelector = kAudioDevicePropertyDeviceIsRunningSomewhere
-
-  status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &isRunning)
-  guard status == noErr else {
-    mediaLogger.error("Failed to check audio running state: \(status)")
-    return false
-  }
-
-  return isRunning != 0
-}
-
 /// Check if an application is installed by looking for its bundle
 private func isAppInstalled(bundleID: String) -> Bool {
   let workspace = NSWorkspace.shared
@@ -149,13 +112,13 @@ func pauseAllMediaApplications() async -> MediaPauseResult {
     "set runningPlayers to {}"
   ]
 
-  for (appName, _) in installedMediaPlayers {
+  for (appName, bundleID) in installedMediaPlayers {
     if appName == "VLC" {
       scriptParts.append("""
       try
-        if application \"VLC\" is running then
+        if application id \"\(bundleID)\" is running then
           set end of runningPlayers to \"VLC\"
-          tell application \"VLC\"
+          tell application id \"\(bundleID)\"
             if playing then
               pause
               set end of pausedPlayers to \"VLC\"
@@ -167,9 +130,9 @@ func pauseAllMediaApplications() async -> MediaPauseResult {
     } else {
       scriptParts.append("""
       try
-        if application \"\(appName)\" is running then
+        if application id \"\(bundleID)\" is running then
           set end of runningPlayers to \"\(appName)\"
-          tell application \"\(appName)\"
+          tell application id \"\(bundleID)\"
             if player state is playing then
               pause
               set end of pausedPlayers to \"\(appName)\"
@@ -228,23 +191,15 @@ func resumeMediaApplications(_ players: [String]) async {
   var scriptParts: [String] = []
   
   for player in validPlayers {
-    if player == "VLC" {
-      scriptParts.append("""
-      try
-        if application id \"org.videolan.vlc\" is running then
-          tell application id \"org.videolan.vlc\" to play
-        end if
-      end try
-      """)
-    } else {
-      scriptParts.append("""
-      try
-        if application \"\(player)\" is running then
-          tell application \"\(player)\" to play
-        end if
-      end try
-      """)
-    }
+    guard let bundleID = installedMediaPlayers[player] else { continue }
+
+    scriptParts.append("""
+    try
+      if application id \"\(bundleID)\" is running then
+        tell application id \"\(bundleID)\" to play
+      end if
+    end try
+    """)
   }
   
   let script = scriptParts.joined(separator: "\n\n")
@@ -775,21 +730,10 @@ actor RecordingClientLive {
           return outcome
         }
 
-        // 2. No known player running — try the media key for browser-based
-        //    or other audio sources. Only send if audio is actually playing
-        //    on the output device.
-        // Skip if we already have inherited or current pause state.
-        if await self.hasActiveOrInheritedPauseState() { return outcome }
-
-        if await isAudioPlayingOnDefaultOutput() {
-          mediaLogger.notice("No known player running; detected audio on output; sending media key")
-          await MainActor.run {
-            sendMediaKey()
-          }
-          await self.setDidPauseMedia(true, sessionID: sessionID)
-          outcome.didPauseMedia = true
-        }
-
+        // 2. No known player running — do nothing.
+        // Never send a generic media key fallback here because macOS may
+        // launch Apple Music to handle it.
+        mediaLogger.notice("No known media player running; skipping media control")
         return outcome
       }
 
@@ -999,11 +943,6 @@ actor RecordingClientLive {
     pausedPlayers = players
   }
 
-  private func setDidPauseMedia(_ value: Bool, sessionID: UUID) {
-    guard recordingSessionID == sessionID else { return }
-    didPauseMedia = value
-  }
-
   private func setPreviousVolume(_ volume: Float, sessionID: UUID) {
     guard recordingSessionID == sessionID else { return }
     previousVolume = volume
@@ -1044,12 +983,6 @@ actor RecordingClientLive {
     if newPlayers.isEmpty { return }
     let merged = Array(Set(pausedPlayers).union(newPlayers))
     pausedPlayers = merged
-  }
-
-  /// True if the current session has any active or inherited pause state.
-  /// Used to suppress the media-key fallback when prior state already covers resume.
-  private func hasActiveOrInheritedPauseState() -> Bool {
-    !pausedPlayers.isEmpty || didPauseMedia
   }
 
   private enum RecorderPreparationError: Error {
