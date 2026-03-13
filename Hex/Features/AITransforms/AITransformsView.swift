@@ -14,6 +14,12 @@ struct AITransformsView: View {
 	@State private var apiKeyInput: String = ""
 	@State private var showingAPIKeySheet: Bool = false
 
+	private var isLocalURL: Bool {
+		let url = store.hexSettings.aiBaseURL
+		guard let parsed = URL(string: url), let host = parsed.host else { return false }
+		return host == "localhost" || host == "127.0.0.1" || host == "0.0.0.0" || host == "::1"
+	}
+
 	var body: some View {
 		ScrollView {
 			VStack(alignment: .leading, spacing: 16) {
@@ -99,7 +105,7 @@ struct AITransformsView: View {
 								.disabled(!store.isOpenAIConfigured)
 								.opacity(store.isOpenAIConfigured ? 1 : 0.5)
 
-							Text("Example: \"Make it sound like Samuel L. Jackson\" or \"Add enthusiasm and energy\"")
+							Text("Example: \"Add proper punctuation\" or \"Fix grammar and add punctuation marks\"")
 								.settingsCaption()
 						}
 					}
@@ -116,22 +122,48 @@ struct AITransformsView: View {
 				// API Configuration Section
 				GroupBox {
 					VStack(alignment: .leading, spacing: 12) {
+						// Base URL Row
+						HStack {
+							Image(systemName: "network")
+								.foregroundStyle(.secondary)
+							Text("API Base URL")
+							Spacer()
+							TextField("https://api.openai.com", text: $store.hexSettings.aiBaseURL)
+								.textFieldStyle(.roundedBorder)
+								.frame(width: 260)
+								.onChange(of: store.hexSettings.aiBaseURL) {
+									store.send(.checkOpenAIAPIKey)
+								}
+						}
+
+						if isLocalURL {
+							HStack(spacing: 6) {
+								Image(systemName: "house.fill")
+									.foregroundStyle(.green)
+								Text("Local server detected — no API key required.")
+									.font(.caption)
+									.foregroundStyle(.secondary)
+							}
+						}
+
+						Divider()
+
 						// API Key Row
 						HStack {
 							Image(systemName: "key.fill")
 								.foregroundStyle(.secondary)
-							Text("OpenAI API Key")
+							Text("API Key")
 							Spacer()
-							if store.isOpenAIConfigured {
+							if store.isOpenAIConfigured || isLocalURL {
 								Image(systemName: "checkmark.circle.fill")
 									.foregroundColor(.green)
-								Text("Configured")
+								Text(isLocalURL ? "Optional" : "Configured")
 									.foregroundStyle(.secondary)
 							} else {
 								Text("Not Set")
 									.foregroundStyle(.secondary)
 							}
-							Button(store.isOpenAIConfigured ? "Change" : "Configure") {
+							Button(store.isOpenAIConfigured && !isLocalURL ? "Change" : "Configure") {
 								showingAPIKeySheet = true
 							}
 						}
@@ -144,7 +176,7 @@ struct AITransformsView: View {
 								.foregroundStyle(.secondary)
 							Text("Model")
 							Spacer()
-							TextField("gpt-5-nano", text: $store.hexSettings.aiModelName)
+							TextField(isLocalURL ? "gemma3:4b" : "gpt-5-nano", text: $store.hexSettings.aiModelName)
 								.textFieldStyle(.roundedBorder)
 								.frame(width: 180)
 						}
@@ -165,7 +197,7 @@ struct AITransformsView: View {
 					VStack(alignment: .leading, spacing: 4) {
 						Text("API Configuration")
 							.font(.headline)
-						Text("Your API key is stored securely in the macOS Keychain. Model defaults to gpt-5-nano.")
+						Text("Works with OpenAI, Ollama (localhost:11434), LM Studio, or any OpenAI-compatible API.")
 							.settingsCaption()
 					}
 				}
@@ -174,7 +206,7 @@ struct AITransformsView: View {
 					HStack(spacing: 8) {
 						Image(systemName: "exclamationmark.triangle.fill")
 							.foregroundStyle(.orange)
-						Text("An OpenAI API key is required to use AI Transforms. Configure your key above to enable these features.")
+						Text("Configure an API key above, or point the base URL to a local server like Ollama.")
 							.font(.callout)
 							.foregroundStyle(.secondary)
 					}
@@ -192,6 +224,7 @@ struct AITransformsView: View {
 			APIKeyConfigSheet(
 				apiKeyInput: $apiKeyInput,
 				isConfigured: store.isOpenAIConfigured,
+				isLocal: isLocalURL,
 				onSave: { key in
 					store.send(.saveOpenAIAPIKey(key))
 				},
@@ -216,15 +249,18 @@ private struct APIKeyConfigSheet: View {
 	@Environment(\.dismiss) var dismiss
 	@Binding var apiKeyInput: String
 	let isConfigured: Bool
+	let isLocal: Bool
 	var onSave: (String) -> Void
 	var onDelete: () -> Void
 
 	var body: some View {
 		VStack(spacing: 20) {
-			Text("OpenAI API Key")
+			Text("API Key")
 				.font(.headline)
 
-			Text("Your API key is stored securely in the macOS Keychain and is only sent to OpenAI's servers.")
+			Text(isLocal
+				? "API key is optional for local servers. Leave empty if your server doesn't require authentication."
+				: "Your API key is stored securely in the macOS Keychain and is only sent to the configured API server.")
 				.font(.caption)
 				.foregroundStyle(.secondary)
 				.multilineTextAlignment(.center)

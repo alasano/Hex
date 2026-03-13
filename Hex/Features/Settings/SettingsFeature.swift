@@ -475,18 +475,14 @@ struct SettingsFeature {
         }
 
       case .checkOpenAIAPIKey:
+        let baseURL = state.hexSettings.aiBaseURL
         return .run { send in
-          let isConfigured = await openAI.isConfigured()
+          let isConfigured = await openAI.isConfigured(baseURL)
           await send(.openAIAPIKeyChecked(isConfigured))
         }
 
       case let .openAIAPIKeyChecked(isConfigured):
         state.isOpenAIConfigured = isConfigured
-        if !isConfigured {
-          state.$hexSettings.withLock {
-            $0.aiTransformEnabled = false
-          }
-        }
         return .none
       }
     }

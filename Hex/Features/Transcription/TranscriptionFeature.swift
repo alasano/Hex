@@ -561,12 +561,13 @@ private extension TranscriptionFeature {
       state.isTransformingAI = true
       let modelName = state.hexSettings.aiModelName
       let maxOutputTokens = state.hexSettings.aiMaxOutputTokens
+      let baseURL = state.hexSettings.aiBaseURL
 
       transcriptionFeatureLogger.info("Starting AI transformation (model: \(modelName))")
 
       return .run { [openAI] send in
         do {
-          let transformedText = try await openAI.transformText(modifiedResult, aiTransformPrompt, modelName, maxOutputTokens)
+          let transformedText = try await openAI.transformText(modifiedResult, aiTransformPrompt, modelName, maxOutputTokens, baseURL)
           await send(.aiTransformResult(transformedText, audioURL, duration))
         } catch {
           HexLog.ai.error("AI transformation failed: \(error.localizedDescription, privacy: .public)")

@@ -10,7 +10,7 @@ import HexCore
 
 private let logger = HexLog.ai
 
-/// A client for transforming text using OpenAI's Responses API.
+/// A client for transforming text using an OpenAI-compatible API.
 @DependencyClient
 struct OpenAIClient: Sendable {
 	/// Transform text using a custom prompt.
@@ -18,21 +18,24 @@ struct OpenAIClient: Sendable {
 	/// - Parameters:
 	///   - text: The transcribed text to transform
 	///   - customPrompt: The transformation prompt
-	///   - modelName: The OpenAI model to use (e.g., "gpt-5-nano")
+	///   - modelName: The model to use (e.g., "gpt-5-nano", "gemma3:4b")
 	///   - maxOutputTokens: Maximum tokens for the response
+	///   - baseURL: The API base URL (e.g., "https://api.openai.com" or "http://localhost:11434")
 	/// - Returns: The transformed text
-	var transformText: @Sendable (_ text: String, _ customPrompt: String, _ modelName: String, _ maxOutputTokens: Int) async throws -> String
+	var transformText: @Sendable (_ text: String, _ customPrompt: String, _ modelName: String, _ maxOutputTokens: Int, _ baseURL: String) async throws -> String
 
-	/// Check if the OpenAI API key is configured.
-	var isConfigured: @Sendable () async -> Bool = { false }
+	/// Check if the API is ready to use.
+	/// For remote APIs, checks that an API key is configured.
+	/// For local APIs (localhost), always returns true.
+	var isConfigured: @Sendable (_ baseURL: String) async -> Bool = { _ in false }
 }
 
 extension OpenAIClient: DependencyKey {
 	static var liveValue: Self {
 		let live = OpenAIClientLive()
 		return Self(
-			transformText: { try await live.transformText($0, customPrompt: $1, modelName: $2, maxOutputTokens: $3) },
-			isConfigured: { await live.isConfigured() }
+			transformText: { try await live.transformText($0, customPrompt: $1, modelName: $2, maxOutputTokens: $3, baseURL: $4) },
+			isConfigured: { await live.isConfigured(baseURL: $0) }
 		)
 	}
 }
@@ -48,6 +51,7 @@ extension DependencyValues {
 
 enum OpenAIError: Error, LocalizedError {
 	case apiKeyNotConfigured
+	case invalidURL(String)
 	case invalidResponse
 	case apiError(statusCode: Int, message: String?)
 	case parsingFailed
@@ -55,16 +59,18 @@ enum OpenAIError: Error, LocalizedError {
 	var errorDescription: String? {
 		switch self {
 		case .apiKeyNotConfigured:
-			return "OpenAI API key not configured"
+			return "API key not configured"
+		case let .invalidURL(url):
+			return "Invalid API base URL: \(url)"
 		case .invalidResponse:
-			return "Invalid response from OpenAI"
+			return "Invalid response from API"
 		case let .apiError(code, message):
 			if let message {
-				return "OpenAI API error (\(code)): \(message)"
+				return "API error (\(code)): \(message)"
 			}
-			return "OpenAI API error (status \(code))"
+			return "API error (status \(code))"
 		case .parsingFailed:
-			return "Failed to parse OpenAI response"
+			return "Failed to parse API response"
 		}
 	}
 }
@@ -76,35 +82,61 @@ actor OpenAIClientLive {
 
 	private let apiKeyName = "openai-api-key"
 
-	func isConfigured() async -> Bool {
-		await keychain.load(apiKeyName) != nil
+	/// Returns true if the base URL points to a local server.
+	private static func isLocalURL(_ baseURL: String) -> Bool {
+		guard let url = URL(string: baseURL), let host = url.host else { return false }
+		return host == "localhost" || host == "127.0.0.1" || host == "0.0.0.0" || host == "::1"
 	}
 
-	func transformText(_ text: String, customPrompt: String, modelName: String, maxOutputTokens: Int) async throws -> String {
-		guard let apiKey = await keychain.load(apiKeyName) else {
-			throw OpenAIError.apiKeyNotConfigured
+	func isConfigured(baseURL: String) async -> Bool {
+		if Self.isLocalURL(baseURL) {
+			return true
+		}
+		return await keychain.load(apiKeyName) != nil
+	}
+
+	func transformText(_ text: String, customPrompt: String, modelName: String, maxOutputTokens: Int, baseURL: String) async throws -> String {
+		let isLocal = Self.isLocalURL(baseURL)
+		var apiKey: String? = nil
+
+		if !isLocal {
+			guard let key = await keychain.load(apiKeyName) else {
+				throw OpenAIError.apiKeyNotConfigured
+			}
+			apiKey = key
+		} else {
+			// Local servers may still accept a key (optional)
+			apiKey = await keychain.load(apiKeyName)
 		}
 
-		let instructions = """
+		let systemPrompt = """
 		Transform the following text according to these instructions:
 		\(customPrompt)
 
 		Only output the transformed text, nothing else.
 		"""
 
-		logger.info("Transforming text with OpenAI (model: \(modelName, privacy: .public))")
+		logger.info("Transforming text with AI (model: \(modelName, privacy: .public), base: \(baseURL, privacy: .public))")
 
-		let url = URL(string: "https://api.openai.com/v1/responses")!
+		// Use /v1/chat/completions — supported by OpenAI, Ollama, LM Studio, and others
+		guard let url = URL(string: "\(baseURL)/v1/chat/completions") else {
+			throw OpenAIError.invalidURL(baseURL)
+		}
+
 		var request = URLRequest(url: url)
 		request.httpMethod = "POST"
-		request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+		if let apiKey {
+			request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+		}
 		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
 		let body: [String: Any] = [
 			"model": modelName,
-			"instructions": instructions,
-			"input": "Rewrite the following text:\n\n\(text)",
-			"max_output_tokens": maxOutputTokens
+			"messages": [
+				["role": "system", "content": systemPrompt],
+				["role": "user", "content": text]
+			],
+			"max_tokens": maxOutputTokens
 		]
 
 		request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -116,7 +148,6 @@ actor OpenAIClientLive {
 		}
 
 		guard httpResponse.statusCode == 200 else {
-			// Try to extract error message from response
 			var errorMessage: String?
 			if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
 			   let error = json["error"] as? [String: Any],
@@ -124,44 +155,23 @@ actor OpenAIClientLive {
 			{
 				errorMessage = message
 			}
-			logger.error("OpenAI API error: status \(httpResponse.statusCode), message: \(errorMessage ?? "unknown", privacy: .public)")
+			logger.error("API error: status \(httpResponse.statusCode), message: \(errorMessage ?? "unknown", privacy: .public)")
 			throw OpenAIError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
 		}
 
-		// Parse the Responses API response
-		guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+		// Parse chat completions response
+		guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+		      let choices = json["choices"] as? [[String: Any]],
+		      let firstChoice = choices.first,
+		      let message = firstChoice["message"] as? [String: Any],
+		      let content = message["content"] as? String
+		else {
+			logger.error("Failed to parse API response: \(String(data: data, encoding: .utf8) ?? "nil", privacy: .private)")
 			throw OpenAIError.parsingFailed
 		}
 
-		// The Responses API returns output in a different format
-		// Look for output_text in the response
-		if let outputText = json["output_text"] as? String {
-			let result = outputText.trimmingCharacters(in: .whitespacesAndNewlines)
-			logger.info("Successfully transformed text (\(result.count) chars)")
-			return result
-		}
-
-		// Alternative: check for output array with items
-		if let output = json["output"] as? [[String: Any]] {
-			for item in output {
-				if item["type"] as? String == "message",
-				   let content = item["content"] as? [[String: Any]]
-				{
-					for contentItem in content {
-						if contentItem["type"] as? String == "output_text",
-						   let text = contentItem["text"] as? String
-						{
-							let result = text.trimmingCharacters(in: .whitespacesAndNewlines)
-							logger.info("Successfully transformed text (\(result.count) chars)")
-							return result
-						}
-					}
-				}
-			}
-		}
-
-		logger.error("Failed to parse OpenAI response: \(String(data: data, encoding: .utf8) ?? "nil", privacy: .private)")
-		throw OpenAIError.parsingFailed
+		let result = content.trimmingCharacters(in: .whitespacesAndNewlines)
+		logger.info("Successfully transformed text (\(result.count) chars)")
+		return result
 	}
-
 }

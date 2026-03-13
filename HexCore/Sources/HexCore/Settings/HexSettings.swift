@@ -54,6 +54,7 @@ public struct HexSettings: Codable, Equatable, Sendable {
 	public var aiTransformPrompt: String
 	public var aiModelName: String
 	public var aiMaxOutputTokens: Int
+	public var aiBaseURL: String
 
 	public init(
 		soundEffectsEnabled: Bool = true,
@@ -84,7 +85,8 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		aiTransformHotkey: HotKey? = nil,
 		aiTransformPrompt: String = "",
 		aiModelName: String = "gpt-5-nano",
-		aiMaxOutputTokens: Int = 32768
+		aiMaxOutputTokens: Int = 32768,
+		aiBaseURL: String = "https://api.openai.com"
 	) {
 		self.soundEffectsEnabled = soundEffectsEnabled
 		self.soundEffectsVolume = soundEffectsVolume
@@ -115,6 +117,7 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		self.aiTransformPrompt = aiTransformPrompt
 		self.aiModelName = aiModelName
 		self.aiMaxOutputTokens = aiMaxOutputTokens
+		self.aiBaseURL = aiBaseURL
 	}
 
 	public init(from decoder: Decoder) throws {
@@ -166,6 +169,7 @@ private enum HexSettingKey: String, CodingKey, CaseIterable {
 	case aiTransformPrompt
 	case aiModelName
 	case aiMaxOutputTokens
+	case aiBaseURL
 }
 
 private struct SettingsField<Value: Codable & Sendable> {
@@ -310,6 +314,7 @@ private enum HexSettingsSchema {
 		).eraseToAny(),
 		SettingsField(.aiTransformPrompt, keyPath: \.aiTransformPrompt, default: defaults.aiTransformPrompt).eraseToAny(),
 		SettingsField(.aiModelName, keyPath: \.aiModelName, default: defaults.aiModelName).eraseToAny(),
-		SettingsField(.aiMaxOutputTokens, keyPath: \.aiMaxOutputTokens, default: defaults.aiMaxOutputTokens).eraseToAny()
+		SettingsField(.aiMaxOutputTokens, keyPath: \.aiMaxOutputTokens, default: defaults.aiMaxOutputTokens).eraseToAny(),
+		SettingsField(.aiBaseURL, keyPath: \.aiBaseURL, default: defaults.aiBaseURL).eraseToAny()
 	]
 }
