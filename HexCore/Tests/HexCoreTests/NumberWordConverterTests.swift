@@ -173,6 +173,55 @@ struct NumberWordConverterTests {
 		#expect(NumberWordConverter.apply("ten twenty") == "10 20")
 	}
 
+	// MARK: - Mixed Digit + Scale Word
+
+	@Test
+	func convertsDigitFollowedByScaleWord() {
+		#expect(NumberWordConverter.apply("15 million dollars") == "15000000 dollars")
+		#expect(NumberWordConverter.apply("27 million") == "27000000")
+		#expect(NumberWordConverter.apply("15 thousand") == "15000")
+		#expect(NumberWordConverter.apply("5 hundred") == "500")
+		#expect(NumberWordConverter.apply("100 thousand") == "100000")
+	}
+
+	@Test
+	func convertsCompoundDigitScaleSequences() {
+		#expect(NumberWordConverter.apply("15 million 200 thousand") == "15200000")
+	}
+
+	@Test
+	func convertsDigitScaleAsDigits() {
+		#expect(NumberWordConverter.apply("127 1000000") == "127000000")
+		#expect(NumberWordConverter.apply("137 1000000000") == "137000000000")
+		#expect(NumberWordConverter.apply("121 1000000") == "121000000")
+		#expect(NumberWordConverter.apply("$127 1000000") == "$127000000")
+		#expect(NumberWordConverter.apply("15 1000000 dollars") == "15000000 dollars")
+		#expect(NumberWordConverter.apply("5 100") == "500")
+		#expect(NumberWordConverter.apply("2 1000") == "2000")
+	}
+
+	@Test
+	func doesNotMergeAdjacentDigitTokens() {
+		#expect(NumberWordConverter.apply("15 20") == "15 20")
+		#expect(NumberWordConverter.apply("I have 5 apples") == "I have 5 apples")
+		#expect(NumberWordConverter.apply("25 items") == "25 items")
+	}
+
+	@Test
+	func preservesLeadingZeroDigitTokens() {
+		#expect(NumberWordConverter.apply("007") == "007")
+	}
+
+	@Test
+	func handlesDigitZeroCorrectly() {
+		#expect(NumberWordConverter.apply("0") == "0")
+	}
+
+	@Test
+	func separatesDigitTokensFromPunctuation() {
+		#expect(NumberWordConverter.apply("$15 million") == "$15000000")
+	}
+
 	// MARK: - Mixed Text
 
 	@Test

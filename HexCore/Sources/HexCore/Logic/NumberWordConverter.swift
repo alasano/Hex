@@ -27,6 +27,9 @@ public enum NumberWordConverter {
 		"trillion": 1_000_000_000_000
 	]
 
+	/// Scale values as digits, for recognizing e.g. "1000000" as a scale multiplier
+	private static let scaleValues: Set<Int> = Set(scales.values)
+
 	/// Words that are part of number expressions but not numbers themselves
 	private static let connectors: Set<String> = ["and"]
 
@@ -47,7 +50,7 @@ public enum NumberWordConverter {
 			let lower = token.lowercased()
 
 			// Check if this token starts a number sequence
-			if isNumberWord(lower) || isLeadingDecimalMarker(tokens: tokens, at: i) {
+			if isNumberWord(lower) || isLeadingDecimalMarker(tokens: tokens, at: i) || parseDigitToken(token) != nil {
 				// Prefer version-like parsing when we have 2+ separators (e.g. "zero point seven point zero" -> "0.7.0")
 				let (versionTokens, versionValue) = parseVersionLikeSequence(tokens: tokens, startIndex: i)
 				if versionTokens > 0, let versionValue {
@@ -110,6 +113,7 @@ public enum NumberWordConverter {
 	private enum TokenType {
 		case word
 		case whitespace
+		case digit
 		case punctuation
 	}
 
@@ -124,6 +128,8 @@ public enum NumberWordConverter {
 			return .whitespace
 		} else if char.isLetter || char == "-" || char == "'" {
 			return .word
+		} else if char.isNumber {
+			return .digit
 		} else {
 			return .punctuation
 		}
@@ -147,6 +153,13 @@ public enum NumberWordConverter {
 			return (0...9).contains(value)
 		}
 		return false
+	}
+
+	/// Returns the integer value of a pure-digit token, or nil if conversion
+	/// would alter the string (e.g. "007" -> 7 loses leading zeros).
+	private static func parseDigitToken(_ token: String) -> Int? {
+		guard let value = Int(token), String(value) == token else { return nil }
+		return value
 	}
 
 	private static func nextNonWhitespaceIndex(tokens: [String], from index: Int) -> Int? {
@@ -251,7 +264,14 @@ public enum NumberWordConverter {
 					if inDecimal {
 						canContinue = isDecimalDigitWord(nextLower)
 					} else {
-						canContinue = isNumberWord(nextLower) || (allowDecimal && nextLower == "point") || (connectors.contains(nextLower) && sawScaleInSequence)
+						let nextDigit = parseDigitToken(tokens[nextIndex])
+						let isNextDigitAfterScale = sawScaleInSequence && nextDigit != nil
+						let isNextDigitScale = nextDigit != nil && scaleValues.contains(nextDigit!) && nextDigit! >= 100
+						canContinue = isNumberWord(nextLower)
+							|| (allowDecimal && nextLower == "point")
+							|| (connectors.contains(nextLower) && sawScaleInSequence)
+							|| isNextDigitAfterScale
+							|| isNextDigitScale
 					}
 					if canContinue {
 						tokensConsumed += 1
@@ -299,6 +319,37 @@ public enum NumberWordConverter {
 					// End of decimal
 					break
 				}
+			}
+
+			// Handle raw digit tokens (e.g. "15" from mixed ASR output like "15 million")
+			if let digitValue = parseDigitToken(token) {
+				// Check if this digit is a scale value (e.g. "1000000" for million)
+				if scaleValues.contains(digitValue) && digitValue >= 100 {
+					if digitValue == 100 {
+						currentValue = (currentValue == 0 ? 1 : currentValue) * 100
+					} else {
+						let groupValue = (currentValue == 0 ? 1 : currentValue) * digitValue
+						total += groupValue
+						currentValue = 0
+					}
+					tokensConsumed += 1
+					i += 1
+					lastWasNumber = true
+					sawScaleInSequence = true
+					lastParsedKind = .scale
+					continue
+				}
+
+				if currentValue == 0 {
+					currentValue = digitValue
+				} else {
+					break
+				}
+				tokensConsumed += 1
+				i += 1
+				lastWasNumber = true
+				lastParsedKind = .ones
+				continue
 			}
 
 			// Handle connectors like "and" (conservative: only in scale contexts)
@@ -405,7 +456,7 @@ public enum NumberWordConverter {
 		let effectiveConsumed = trimTrailingWhitespace(tokens: tokens, startIndex: startIndex, consumedCount: tokensConsumed)
 
 		// Only return consumed tokens if we actually parsed a number
-		if effectiveConsumed > 0 && (hasDecimal || total > 0 || (effectiveConsumed == 1 && tokens[startIndex].lowercased() == "zero")) {
+		if effectiveConsumed > 0 && (hasDecimal || total > 0 || (effectiveConsumed == 1 && (tokens[startIndex].lowercased() == "zero" || tokens[startIndex] == "0"))) {
 			return (effectiveConsumed, total, hasDecimal, decimalString)
 		}
 
