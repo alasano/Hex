@@ -6,6 +6,12 @@ public enum RecordingAudioBehavior: String, Codable, CaseIterable, Equatable, Se
 	case doNothing
 }
 
+/// Which backend serves AI transform requests.
+public enum AIProviderType: String, Codable, CaseIterable, Equatable, Sendable {
+	case openai
+	case openaiCompatible
+}
+
 /// User-configurable settings saved to disk.
 public struct HexSettings: Codable, Equatable, Sendable {
 	public static let defaultPasteLastTranscriptHotkey = HotKey(key: .v, modifiers: [.option, .shift])
@@ -52,8 +58,19 @@ public struct HexSettings: Codable, Equatable, Sendable {
 	public var aiTransformEnabled: Bool
 	public var aiTransformHotkey: HotKey?
 	public var aiTransformPrompt: String
+	public var aiProviderType: AIProviderType
 	public var aiModelName: String
+	public var aiCompatibleBaseURL: String
+	public var aiCompatibleModelName: String
 	public var aiMaxOutputTokens: Int
+
+	/// Model to use for the currently selected AI provider.
+	public var activeAIModelName: String {
+		switch aiProviderType {
+		case .openai: return aiModelName
+		case .openaiCompatible: return aiCompatibleModelName
+		}
+	}
 
 	public init(
 		soundEffectsEnabled: Bool = true,
@@ -83,7 +100,10 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		aiTransformEnabled: Bool = false,
 		aiTransformHotkey: HotKey? = nil,
 		aiTransformPrompt: String = "",
-		aiModelName: String = "gpt-5-nano",
+		aiProviderType: AIProviderType = .openai,
+		aiModelName: String = "gpt-5.6-luna",
+		aiCompatibleBaseURL: String = "",
+		aiCompatibleModelName: String = "gpt-oss-120b",
 		aiMaxOutputTokens: Int = 32768
 	) {
 		self.soundEffectsEnabled = soundEffectsEnabled
@@ -113,7 +133,10 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		self.aiTransformEnabled = aiTransformEnabled
 		self.aiTransformHotkey = aiTransformHotkey
 		self.aiTransformPrompt = aiTransformPrompt
+		self.aiProviderType = aiProviderType
 		self.aiModelName = aiModelName
+		self.aiCompatibleBaseURL = aiCompatibleBaseURL
+		self.aiCompatibleModelName = aiCompatibleModelName
 		self.aiMaxOutputTokens = aiMaxOutputTokens
 	}
 
@@ -164,7 +187,10 @@ private enum HexSettingKey: String, CodingKey, CaseIterable {
 	case aiTransformEnabled
 	case aiTransformHotkey
 	case aiTransformPrompt
+	case aiProviderType
 	case aiModelName
+	case aiCompatibleBaseURL
+	case aiCompatibleModelName
 	case aiMaxOutputTokens
 }
 
@@ -309,7 +335,10 @@ private enum HexSettingsSchema {
 			}
 		).eraseToAny(),
 		SettingsField(.aiTransformPrompt, keyPath: \.aiTransformPrompt, default: defaults.aiTransformPrompt).eraseToAny(),
+		SettingsField(.aiProviderType, keyPath: \.aiProviderType, default: defaults.aiProviderType).eraseToAny(),
 		SettingsField(.aiModelName, keyPath: \.aiModelName, default: defaults.aiModelName).eraseToAny(),
+		SettingsField(.aiCompatibleBaseURL, keyPath: \.aiCompatibleBaseURL, default: defaults.aiCompatibleBaseURL).eraseToAny(),
+		SettingsField(.aiCompatibleModelName, keyPath: \.aiCompatibleModelName, default: defaults.aiCompatibleModelName).eraseToAny(),
 		SettingsField(.aiMaxOutputTokens, keyPath: \.aiMaxOutputTokens, default: defaults.aiMaxOutputTokens).eraseToAny()
 	]
 }

@@ -59,7 +59,7 @@ struct SettingsFeature {
     var shouldFlashModelSection = false
 
     // AI Transforms
-    var isOpenAIConfigured: Bool = false
+    var isAIProviderConfigured: Bool = false
   }
 
   enum Action: BindableAction {
@@ -105,11 +105,11 @@ struct SettingsFeature {
     case clearAITransformHotkey
     case setAITransformModifierSide(Modifier.Kind, Modifier.Side)
 
-    // AI Transforms / OpenAI API Key
-    case saveOpenAIAPIKey(String)
-    case deleteOpenAIAPIKey
-    case checkOpenAIAPIKey
-    case openAIAPIKeyChecked(Bool)
+    // AI Transforms / provider API key (targets the currently selected provider)
+    case saveAIAPIKey(String)
+    case deleteAIAPIKey
+    case checkAIAPIKey
+    case aiAPIKeyChecked(Bool)
   }
 
   @Dependency(\.keyEventMonitor) var keyEventMonitor
@@ -458,30 +458,33 @@ struct SettingsFeature {
         }
         return .none
 
-      // AI Transforms / OpenAI API Key
-      case let .saveOpenAIAPIKey(key):
+      // AI Transforms / provider API key
+      case let .saveAIAPIKey(key):
+        let provider = state.hexSettings.aiProviderType
         return .run { send in
-          try await keychain.save("openai-api-key", key)
-          await send(.openAIAPIKeyChecked(true))
+          try await keychain.save(provider.apiKeyName, key)
+          await send(.aiAPIKeyChecked(true))
         }
 
-      case .deleteOpenAIAPIKey:
+      case .deleteAIAPIKey:
         state.$hexSettings.withLock {
           $0.aiTransformEnabled = false
         }
+        let provider = state.hexSettings.aiProviderType
         return .run { send in
-          try? await keychain.delete("openai-api-key")
-          await send(.openAIAPIKeyChecked(false))
+          try? await keychain.delete(provider.apiKeyName)
+          await send(.aiAPIKeyChecked(false))
         }
 
-      case .checkOpenAIAPIKey:
+      case .checkAIAPIKey:
+        let provider = state.hexSettings.aiProviderType
         return .run { send in
-          let isConfigured = await openAI.isConfigured()
-          await send(.openAIAPIKeyChecked(isConfigured))
+          let isConfigured = await openAI.isConfigured(provider)
+          await send(.aiAPIKeyChecked(isConfigured))
         }
 
-      case let .openAIAPIKeyChecked(isConfigured):
-        state.isOpenAIConfigured = isConfigured
+      case let .aiAPIKeyChecked(isConfigured):
+        state.isAIProviderConfigured = isConfigured
         if !isConfigured {
           state.$hexSettings.withLock {
             $0.aiTransformEnabled = false

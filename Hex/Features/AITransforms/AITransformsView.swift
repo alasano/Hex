@@ -96,8 +96,8 @@ struct AITransformsView: View {
 									RoundedRectangle(cornerRadius: 6)
 										.stroke(Color(nsColor: .separatorColor), lineWidth: 1)
 								)
-								.disabled(!store.isOpenAIConfigured)
-								.opacity(store.isOpenAIConfigured ? 1 : 0.5)
+								.disabled(!store.isAIProviderConfigured)
+								.opacity(store.isAIProviderConfigured ? 1 : 0.5)
 
 							Text("Example: \"Make it sound like Samuel L. Jackson\" or \"Add enthusiasm and energy\"")
 								.settingsCaption()
@@ -116,13 +116,44 @@ struct AITransformsView: View {
 				// API Configuration Section
 				GroupBox {
 					VStack(alignment: .leading, spacing: 12) {
+						// Provider Row
+						HStack {
+							Image(systemName: "server.rack")
+								.foregroundStyle(.secondary)
+							Text("Provider")
+							Spacer()
+							Picker("Provider", selection: $store.hexSettings.aiProviderType) {
+								Text("OpenAI").tag(AIProviderType.openai)
+								Text("OpenAI-compatible").tag(AIProviderType.openaiCompatible)
+							}
+							.labelsHidden()
+							.frame(width: 180)
+						}
+
+						if store.hexSettings.aiProviderType == .openaiCompatible {
+							Divider()
+
+							// Base URL Row
+							HStack {
+								Image(systemName: "link")
+									.foregroundStyle(.secondary)
+								Text("Base URL")
+								Spacer()
+								TextField("https://api.cerebras.ai/v1", text: $store.hexSettings.aiCompatibleBaseURL)
+									.textFieldStyle(.roundedBorder)
+									.frame(width: 240)
+							}
+						}
+
+						Divider()
+
 						// API Key Row
 						HStack {
 							Image(systemName: "key.fill")
 								.foregroundStyle(.secondary)
-							Text("OpenAI API Key")
+							Text(store.hexSettings.aiProviderType == .openai ? "OpenAI API Key" : "API Key")
 							Spacer()
-							if store.isOpenAIConfigured {
+							if store.isAIProviderConfigured {
 								Image(systemName: "checkmark.circle.fill")
 									.foregroundColor(.green)
 								Text("Configured")
@@ -131,7 +162,7 @@ struct AITransformsView: View {
 								Text("Not Set")
 									.foregroundStyle(.secondary)
 							}
-							Button(store.isOpenAIConfigured ? "Change" : "Configure") {
+							Button(store.isAIProviderConfigured ? "Change" : "Configure") {
 								showingAPIKeySheet = true
 							}
 						}
@@ -144,9 +175,15 @@ struct AITransformsView: View {
 								.foregroundStyle(.secondary)
 							Text("Model")
 							Spacer()
-							TextField("gpt-5-nano", text: $store.hexSettings.aiModelName)
-								.textFieldStyle(.roundedBorder)
-								.frame(width: 180)
+							if store.hexSettings.aiProviderType == .openai {
+								TextField("gpt-5.6-luna", text: $store.hexSettings.aiModelName)
+									.textFieldStyle(.roundedBorder)
+									.frame(width: 180)
+							} else {
+								TextField("gpt-oss-120b", text: $store.hexSettings.aiCompatibleModelName)
+									.textFieldStyle(.roundedBorder)
+									.frame(width: 180)
+							}
 						}
 
 						// Max Output Tokens Row
@@ -165,16 +202,16 @@ struct AITransformsView: View {
 					VStack(alignment: .leading, spacing: 4) {
 						Text("API Configuration")
 							.font(.headline)
-						Text("Your API key is stored securely in the macOS Keychain. Model defaults to gpt-5-nano.")
+						Text("Each provider keeps its own API key and model. Keys are stored securely in the macOS Keychain.")
 							.settingsCaption()
 					}
 				}
 
-				if !store.isOpenAIConfigured {
+				if !store.isAIProviderConfigured {
 					HStack(spacing: 8) {
 						Image(systemName: "exclamationmark.triangle.fill")
 							.foregroundStyle(.orange)
-						Text("An OpenAI API key is required to use AI Transforms. Configure your key above to enable these features.")
+						Text("An API key is required to use AI Transforms. Configure your key above to enable these features.")
 							.font(.callout)
 							.foregroundStyle(.secondary)
 					}
@@ -191,12 +228,13 @@ struct AITransformsView: View {
 		.sheet(isPresented: $showingAPIKeySheet) {
 			APIKeyConfigSheet(
 				apiKeyInput: $apiKeyInput,
-				isConfigured: store.isOpenAIConfigured,
+				provider: store.hexSettings.aiProviderType,
+				isConfigured: store.isAIProviderConfigured,
 				onSave: { key in
-					store.send(.saveOpenAIAPIKey(key))
+					store.send(.saveAIAPIKey(key))
 				},
 				onDelete: {
-					store.send(.deleteOpenAIAPIKey)
+					store.send(.deleteAIAPIKey)
 				}
 			)
 		}
@@ -204,7 +242,10 @@ struct AITransformsView: View {
 			await store.send(.task).finish()
 		}
 		.task {
-			await store.send(.checkOpenAIAPIKey).finish()
+			await store.send(.checkAIAPIKey).finish()
+		}
+		.onChange(of: store.hexSettings.aiProviderType) {
+			store.send(.checkAIAPIKey)
 		}
 		.enableInjection()
 	}
@@ -215,21 +256,24 @@ struct AITransformsView: View {
 private struct APIKeyConfigSheet: View {
 	@Environment(\.dismiss) var dismiss
 	@Binding var apiKeyInput: String
+	let provider: AIProviderType
 	let isConfigured: Bool
 	var onSave: (String) -> Void
 	var onDelete: () -> Void
 
 	var body: some View {
 		VStack(spacing: 20) {
-			Text("OpenAI API Key")
+			Text(provider == .openai ? "OpenAI API Key" : "API Key")
 				.font(.headline)
 
-			Text("Your API key is stored securely in the macOS Keychain and is only sent to OpenAI's servers.")
+			Text(provider == .openai
+				? "Your API key is stored securely in the macOS Keychain and is only sent to OpenAI's servers."
+				: "Your API key is stored securely in the macOS Keychain and is only sent to the provider at your configured base URL.")
 				.font(.caption)
 				.foregroundStyle(.secondary)
 				.multilineTextAlignment(.center)
 
-			SecureField("sk-...", text: $apiKeyInput)
+			SecureField(provider == .openai ? "sk-..." : "csk-...", text: $apiKeyInput)
 				.textFieldStyle(.roundedBorder)
 				.frame(width: 320)
 
