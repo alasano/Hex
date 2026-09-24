@@ -14,6 +14,19 @@ struct AITransformsView: View {
 	@State private var apiKeyInput: String = ""
 	@State private var showingAPIKeySheet: Bool = false
 
+	private static let customModelTag = "__custom__"
+
+	/// Preset ID when the active model is a preset, otherwise the custom tag.
+	/// Choosing Custom clears the model ID so the text field starts empty.
+	private var modelSelection: Binding<String> {
+		let provider = store.hexSettings.aiProviderType
+		let modelName = $store.hexSettings.activeAIModelName
+		return Binding(
+			get: { provider.modelPreset(id: modelName.wrappedValue)?.id ?? Self.customModelTag },
+			set: { modelName.wrappedValue = $0 == Self.customModelTag ? "" : $0 }
+		)
+	}
+
 	var body: some View {
 		ScrollView {
 			VStack(alignment: .leading, spacing: 16) {
@@ -169,18 +182,52 @@ struct AITransformsView: View {
 
 						Divider()
 
-						// Model Name Row
+						let presets = store.hexSettings.aiProviderType.modelPresets
+						let activePreset = store.hexSettings.aiProviderType.modelPreset(id: store.hexSettings.activeAIModelName)
+
+						// Model Row
 						HStack {
 							Image(systemName: "cpu")
 								.foregroundStyle(.secondary)
 							Text("Model")
 							Spacer()
-							if store.hexSettings.aiProviderType == .openai {
-								TextField("gpt-5.6-luna", text: $store.hexSettings.aiModelName)
+							Picker("Model", selection: modelSelection) {
+								ForEach(presets, id: \.id) { preset in
+									Text(preset.displayName).tag(preset.id)
+								}
+								Divider()
+								Text("Custom…").tag(Self.customModelTag)
+							}
+							.labelsHidden()
+							.frame(width: 240)
+						}
+
+						if activePreset == nil {
+							HStack {
+								Spacer()
+								TextField("Model ID", text: $store.hexSettings.activeAIModelName)
 									.textFieldStyle(.roundedBorder)
-									.frame(width: 180)
+									.frame(width: 240)
+							}
+						}
+
+						// Reasoning Effort Row
+						HStack {
+							Image(systemName: "brain")
+								.foregroundStyle(.secondary)
+							Text("Reasoning")
+							Spacer()
+							if let activePreset {
+								Picker("Reasoning", selection: $store.hexSettings.activeAIReasoningEffort) {
+									Text("Default (\(activePreset.defaultReasoningEffort))").tag("")
+									ForEach(activePreset.reasoningEfforts, id: \.self) { effort in
+										Text(effort).tag(effort)
+									}
+								}
+								.labelsHidden()
+								.frame(width: 180)
 							} else {
-								TextField("gpt-oss-120b", text: $store.hexSettings.aiCompatibleModelName)
+								TextField("Model default", text: $store.hexSettings.activeAIReasoningEffort)
 									.textFieldStyle(.roundedBorder)
 									.frame(width: 180)
 							}
@@ -202,7 +249,7 @@ struct AITransformsView: View {
 					VStack(alignment: .leading, spacing: 4) {
 						Text("API Configuration")
 							.font(.headline)
-						Text("Each provider keeps its own API key and model. Keys are stored securely in the macOS Keychain.")
+						Text("Each provider keeps its own API key, model, and reasoning effort. Supported reasoning values depend on the model. Keys are stored securely in the macOS Keychain.")
 							.settingsCaption()
 					}
 				}

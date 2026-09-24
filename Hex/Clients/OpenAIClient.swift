@@ -31,10 +31,11 @@ struct OpenAIClient: Sendable {
 	///   - customPrompt: The transformation prompt
 	///   - provider: Which backend to call
 	///   - baseURL: Base URL for the OpenAI-compatible provider (ignored for OpenAI)
-	///   - modelName: The model to use (e.g., "gpt-5.6-luna", "gpt-oss-120b")
+	///   - modelName: The model to use (e.g., "gpt-6-luna", "qwen-3.8-27b")
+	///   - reasoningEffort: Reasoning effort to request; empty omits it so the model default applies
 	///   - maxOutputTokens: Maximum tokens for the response
 	/// - Returns: The transformed text
-	var transformText: @Sendable (_ text: String, _ customPrompt: String, _ provider: AIProviderType, _ baseURL: String, _ modelName: String, _ maxOutputTokens: Int) async throws -> String
+	var transformText: @Sendable (_ text: String, _ customPrompt: String, _ provider: AIProviderType, _ baseURL: String, _ modelName: String, _ reasoningEffort: String, _ maxOutputTokens: Int) async throws -> String
 
 	/// Check if the given provider's API key is configured.
 	var isConfigured: @Sendable (_ provider: AIProviderType) async -> Bool = { _ in false }
@@ -44,7 +45,7 @@ extension OpenAIClient: DependencyKey {
 	static var liveValue: Self {
 		let live = OpenAIClientLive()
 		return Self(
-			transformText: { try await live.transformText($0, customPrompt: $1, provider: $2, baseURL: $3, modelName: $4, maxOutputTokens: $5) },
+			transformText: { try await live.transformText($0, customPrompt: $1, provider: $2, baseURL: $3, modelName: $4, reasoningEffort: $5, maxOutputTokens: $6) },
 			isConfigured: { await live.isConfigured($0) }
 		)
 	}
@@ -94,7 +95,7 @@ actor OpenAIClientLive {
 		await keychain.load(provider.apiKeyName) != nil
 	}
 
-	func transformText(_ text: String, customPrompt: String, provider: AIProviderType, baseURL: String, modelName: String, maxOutputTokens: Int) async throws -> String {
+	func transformText(_ text: String, customPrompt: String, provider: AIProviderType, baseURL: String, modelName: String, reasoningEffort: String, maxOutputTokens: Int) async throws -> String {
 		guard let apiKey = await keychain.load(provider.apiKeyName) else {
 			throw OpenAIError.apiKeyNotConfigured
 		}
@@ -107,10 +108,10 @@ actor OpenAIClientLive {
 		"""
 		let userInput = "Rewrite the following text:\n\n\(text)"
 
-		logger.info("Transforming text with \(provider.rawValue, privacy: .public) (model: \(modelName, privacy: .public))")
+		logger.info("Transforming text with \(provider.rawValue, privacy: .public) (model: \(modelName, privacy: .public), reasoning effort: \(reasoningEffort.isEmpty ? "default" : reasoningEffort, privacy: .public))")
 
 		let url: URL
-		let body: [String: Any]
+		var body: [String: Any]
 		switch provider {
 		case .openai:
 			url = URL(string: "https://api.openai.com/v1/responses")!
@@ -118,9 +119,11 @@ actor OpenAIClientLive {
 				"model": modelName,
 				"instructions": instructions,
 				"input": userInput,
-				"reasoning": ["effort": "low"],
 				"max_output_tokens": maxOutputTokens
 			]
+			if !reasoningEffort.isEmpty {
+				body["reasoning"] = ["effort": reasoningEffort]
+			}
 		case .openaiCompatible:
 			let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
 			let root = trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
@@ -139,6 +142,9 @@ actor OpenAIClientLive {
 				],
 				"max_completion_tokens": maxOutputTokens
 			]
+			if !reasoningEffort.isEmpty {
+				body["reasoning_effort"] = reasoningEffort
+			}
 		}
 
 		var request = URLRequest(url: url)

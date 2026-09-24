@@ -62,13 +62,48 @@ public struct HexSettings: Codable, Equatable, Sendable {
 	public var aiModelName: String
 	public var aiCompatibleBaseURL: String
 	public var aiCompatibleModelName: String
+	/// Reasoning effort sent to OpenAI. Empty means omit it and use the model's default.
+	public var aiReasoningEffort: String
+	/// Reasoning effort sent to the OpenAI-compatible provider. Empty means omit it and use the model's default.
+	public var aiCompatibleReasoningEffort: String
 	public var aiMaxOutputTokens: Int
 
-	/// Model to use for the currently selected AI provider.
+	/// Model to use for the currently selected AI provider. Switching to a preset
+	/// that does not accept the current reasoning effort resets it to the model default.
 	public var activeAIModelName: String {
-		switch aiProviderType {
-		case .openai: return aiModelName
-		case .openaiCompatible: return aiCompatibleModelName
+		get {
+			switch aiProviderType {
+			case .openai: return aiModelName
+			case .openaiCompatible: return aiCompatibleModelName
+			}
+		}
+		set {
+			switch aiProviderType {
+			case .openai: aiModelName = newValue
+			case .openaiCompatible: aiCompatibleModelName = newValue
+			}
+			if let preset = aiProviderType.modelPreset(id: newValue),
+			   !activeAIReasoningEffort.isEmpty,
+			   !preset.reasoningEfforts.contains(activeAIReasoningEffort)
+			{
+				activeAIReasoningEffort = ""
+			}
+		}
+	}
+
+	/// Reasoning effort for the currently selected AI provider.
+	public var activeAIReasoningEffort: String {
+		get {
+			switch aiProviderType {
+			case .openai: return aiReasoningEffort
+			case .openaiCompatible: return aiCompatibleReasoningEffort
+			}
+		}
+		set {
+			switch aiProviderType {
+			case .openai: aiReasoningEffort = newValue
+			case .openaiCompatible: aiCompatibleReasoningEffort = newValue
+			}
 		}
 	}
 
@@ -101,9 +136,11 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		aiTransformHotkey: HotKey? = nil,
 		aiTransformPrompt: String = "",
 		aiProviderType: AIProviderType = .openai,
-		aiModelName: String = "gpt-5.6-luna",
+		aiModelName: String = "gpt-6-luna",
 		aiCompatibleBaseURL: String = "",
 		aiCompatibleModelName: String = "gpt-oss-120b",
+		aiReasoningEffort: String = "low",
+		aiCompatibleReasoningEffort: String = "",
 		aiMaxOutputTokens: Int = 32768
 	) {
 		self.soundEffectsEnabled = soundEffectsEnabled
@@ -137,6 +174,8 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		self.aiModelName = aiModelName
 		self.aiCompatibleBaseURL = aiCompatibleBaseURL
 		self.aiCompatibleModelName = aiCompatibleModelName
+		self.aiReasoningEffort = aiReasoningEffort
+		self.aiCompatibleReasoningEffort = aiCompatibleReasoningEffort
 		self.aiMaxOutputTokens = aiMaxOutputTokens
 	}
 
@@ -191,6 +230,8 @@ private enum HexSettingKey: String, CodingKey, CaseIterable {
 	case aiModelName
 	case aiCompatibleBaseURL
 	case aiCompatibleModelName
+	case aiReasoningEffort
+	case aiCompatibleReasoningEffort
 	case aiMaxOutputTokens
 }
 
@@ -339,6 +380,8 @@ private enum HexSettingsSchema {
 		SettingsField(.aiModelName, keyPath: \.aiModelName, default: defaults.aiModelName).eraseToAny(),
 		SettingsField(.aiCompatibleBaseURL, keyPath: \.aiCompatibleBaseURL, default: defaults.aiCompatibleBaseURL).eraseToAny(),
 		SettingsField(.aiCompatibleModelName, keyPath: \.aiCompatibleModelName, default: defaults.aiCompatibleModelName).eraseToAny(),
+		SettingsField(.aiReasoningEffort, keyPath: \.aiReasoningEffort, default: defaults.aiReasoningEffort).eraseToAny(),
+		SettingsField(.aiCompatibleReasoningEffort, keyPath: \.aiCompatibleReasoningEffort, default: defaults.aiCompatibleReasoningEffort).eraseToAny(),
 		SettingsField(.aiMaxOutputTokens, keyPath: \.aiMaxOutputTokens, default: defaults.aiMaxOutputTokens).eraseToAny()
 	]
 }

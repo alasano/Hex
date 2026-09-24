@@ -23,6 +23,8 @@ final class HexSettingsMigrationTests: XCTestCase {
 		XCTAssertEqual(decoded.maxHistoryEntries, 10)
 		XCTAssertEqual(decoded.hasCompletedModelBootstrap, true)
 		XCTAssertEqual(decoded.hasCompletedStorageMigration, true)
+		XCTAssertEqual(decoded.aiReasoningEffort, "low", "OpenAI keeps the effort it was previously hardcoded to")
+		XCTAssertEqual(decoded.aiCompatibleReasoningEffort, "", "Compatible providers keep omitting reasoning effort")
 	}
 
 	func testEncodeDecodeRoundTripPreservesDefaults() throws {
